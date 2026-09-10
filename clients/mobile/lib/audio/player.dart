@@ -11,31 +11,63 @@ class TtsSegment {
   final String text;
 }
 
-/// Queue sentence-level TTS blobs and play sequentially.
+/// Queue sentence-level TTS blobs and play sequentially (web-aligned).
 class TtsPlayer {
   final AudioPlayer _player = AudioPlayer();
   final List<TtsSegment> _queue = [];
+  List<TtsSegment> lastTurn = [];
+  final List<TtsSegment> _turnBuf = [];
   bool _playing = false;
   void Function(String text)? onCaption;
   void Function()? onBecameIdle;
+  void Function()? onQueueChanged;
 
   bool get isBusy => _playing || _queue.isNotEmpty;
+
+  void beginTurn() {
+    _turnBuf.clear();
+    onQueueChanged?.call();
+  }
 
   void enqueue(TtsSegment seg) {
     if (seg.bytes.isEmpty) return;
     _queue.add(seg);
+    _turnBuf.add(seg);
+    onQueueChanged?.call();
     unawaited(_pump());
   }
 
-  void clear() {
+  void clear({bool keepLast = false}) {
     _queue.clear();
+    if (!keepLast) {
+      // leave lastTurn as-is for replay
+    }
     unawaited(_player.stop());
     _playing = false;
+    onQueueChanged?.call();
+  }
+
+  void commitTurn() {
+    if (_turnBuf.isNotEmpty) {
+      lastTurn = List<TtsSegment>.from(_turnBuf);
+      _turnBuf.clear();
+      onQueueChanged?.call();
+    }
+  }
+
+  Future<void> replayLast() async {
+    if (lastTurn.isEmpty || isBusy) return;
+    for (final seg in lastTurn) {
+      _queue.add(seg);
+    }
+    onQueueChanged?.call();
+    await _pump();
   }
 
   Future<void> _pump() async {
     if (_playing) return;
     _playing = true;
+    onQueueChanged?.call();
     try {
       while (_queue.isNotEmpty) {
         final seg = _queue.removeAt(0);
@@ -69,6 +101,7 @@ class TtsPlayer {
     } finally {
       _playing = false;
       onBecameIdle?.call();
+      onQueueChanged?.call();
     }
   }
 

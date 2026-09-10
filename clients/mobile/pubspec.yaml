@@ -10,8 +10,6 @@ dependencies:
   flutter:
     sdk: flutter
   web_socket_channel: ^3.0.1
-  # 5.1.x pulls mismatched record_linux / platform_interface → APK compile fails.
-  # 6.2.1 is last 6.x before Flutter 3.44 requirement of v7.
   record: 6.2.1
   audioplayers: ^6.1.0
   path_provider: ^2.1.5
@@ -26,3 +24,6 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/sprites/monthly-salary-cat/spritesheet.webp
+    - assets/sprites/arona-v1/spritesheet.webp

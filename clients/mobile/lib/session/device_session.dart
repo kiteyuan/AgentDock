@@ -30,10 +30,12 @@ class DeviceSession {
   String? lastError;
   String statusLine = '';
   String replyText = '';
+  bool captionMode = false;
 
   String url = 'ws://192.168.1.1:8765';
   String token = '';
   String ttsId = 'haibara';
+  String petId = 'monthly-salary-cat';
 
   final List<int> _ttsBuf = [];
   String _ttsPendingText = '';
@@ -41,6 +43,17 @@ class DeviceSession {
 
   final _changes = StreamController<void>.broadcast();
   Stream<void> get changes => _changes.stream;
+
+  bool get canToggleTalk =>
+      sessionId != null &&
+      (state == ClientState.idle || state == ClientState.listening);
+
+  bool get canReplay =>
+      sessionId != null &&
+      state == ClientState.idle &&
+      !player.isBusy &&
+      player.lastTurn.isNotEmpty &&
+      replyText.trim().isNotEmpty;
 
   void _notify() {
     if (!_changes.isClosed) _changes.add(null);
@@ -83,12 +96,15 @@ class DeviceSession {
         }
       });
       player.onCaption = (t) {
-        if (t.trim().isNotEmpty) {
-          replyText = replyText.isEmpty ? t.trim() : '$replyText\n${t.trim()}';
-          _notify();
+        final line = t.trim();
+        if (line.isEmpty) return;
+        if (captionMode) {
+          replyText = replyText.isEmpty ? line : '$replyText\n$line';
         }
+        _notify();
       };
       player.onBecameIdle = _maybeIdle;
+      player.onQueueChanged = _notify;
     } catch (e) {
       lastError = e.toString();
       _setState(ClientState.error, status: lastError);
@@ -121,12 +137,15 @@ class DeviceSession {
     await _startListen();
   }
 
+  Future<void> replayLast() => player.replayLast();
+
   Future<void> cancelTurn() async {
     if (sessionId == null || _ws == null) return;
     _ws!.sink.add(proto.sessionCancel(sessionId!));
     player.clear();
     _ttsBuf.clear();
     _awaitingIdle = false;
+    captionMode = false;
     await recorder.cancel();
     _setState(ClientState.idle, status: '已取消');
   }
@@ -136,7 +155,9 @@ class DeviceSession {
       await recorder.start();
       _ttsBuf.clear();
       player.clear();
+      player.beginTurn();
       _awaitingIdle = false;
+      captionMode = false;
       replyText = '';
       _setState(ClientState.listening, status: '正在录音…');
     } catch (e) {
@@ -177,7 +198,7 @@ class DeviceSession {
     switch (type) {
       case 'session.accept':
         sessionId = payload['session_id'] as String?;
-        _setState(ClientState.idle, status: '点按通话');
+        _setState(ClientState.idle, status: '点按角色通话');
         if (ttsId.isNotEmpty && sessionId != null) {
           _ws?.sink.add(proto.ttsSelect(sessionId!, ttsId));
         }
@@ -188,28 +209,23 @@ class DeviceSession {
         break;
       case 'stt.final':
         final t = (payload['text'] as String? ?? '').trim();
-        if (t.isNotEmpty) {
-          statusLine = '你：$t';
+        if (t.isNotEmpty && !captionMode) {
           replyText = t;
         }
-        _setState(ClientState.busy, status: statusLine);
+        _setState(ClientState.busy, status: t.isEmpty ? '识别中' : '你：$t');
         break;
       case 'agent.thinking':
       case 'agent.tool_call':
       case 'agent.tool_result':
-        if (type == 'agent.tool_call') {
-          statusLine = '工具：${payload['tool'] ?? 'tool'}';
-        } else if (type == 'agent.tool_result') {
-          statusLine = '结果：${payload['status'] ?? 'ok'}';
-        } else {
-          statusLine = '思考中';
-        }
-        _setState(ClientState.busy, status: statusLine);
+        _setState(ClientState.busy, status: '处理中');
         break;
       case 'agent.message':
         final speak = payload['speak'] != false;
         final t = (payload['content'] ?? payload['text'] ?? '').toString().trim();
-        if (!speak && t.isNotEmpty) {
+        if (speak) {
+          captionMode = true;
+          // Defer spoken text until tts.start captions (web behavior).
+        } else if (t.isNotEmpty) {
           replyText = t;
         }
         _setState(ClientState.busy, status: '处理中');
@@ -217,6 +233,9 @@ class DeviceSession {
       case 'tts.start':
         _ttsBuf.clear();
         _ttsPendingText = (payload['text'] as String? ?? '').trim();
+        if (captionMode && replyText.isEmpty) {
+          // first sentence will arrive via onCaption when audio plays
+        }
         _setState(ClientState.speaking, status: '播放中');
         break;
       case 'tts.end':
@@ -237,6 +256,7 @@ class DeviceSession {
         player.clear();
         _ttsBuf.clear();
         _awaitingIdle = false;
+        captionMode = false;
         _setState(ClientState.idle, status: '已取消');
         break;
       case 'device.pong':
@@ -249,8 +269,10 @@ class DeviceSession {
   void _maybeIdle() {
     if (_awaitingIdle && !player.isBusy && _ttsBuf.isEmpty) {
       _awaitingIdle = false;
+      player.commitTurn();
+      captionMode = false;
       if (state == ClientState.busy || state == ClientState.speaking) {
-        _setState(ClientState.idle, status: '点按通话');
+        _setState(ClientState.idle, status: '点按角色通话');
       }
     }
   }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'session/device_session.dart';
 import 'ui/home_page.dart';
+import 'ui/theme.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,7 +38,11 @@ class _AgentDockAppState extends State<AgentDockApp> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        colorSchemeSeed: const Color(0xFF2F9E6B),
+        scaffoldBackgroundColor: WebUiTheme.bg0,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: WebUiTheme.accent,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
       ),
       home: HomePage(session: _session),
