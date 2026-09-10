@@ -5,12 +5,12 @@
 
 ## 本机开发
 
-需安装 [Flutter](https://docs.flutter.dev/get-started/install)。
+需安装 [Flutter](https://docs.flutter.dev/get-started/install) **≥ 3.27**（`record` / Android 插件依赖 `flutter.compileSdkVersion`）。
 
 ```bash
 cd clients/mobile
 flutter create . --project-name agentdock_mobile --org com.agentdock --platforms=android
-# 首次生成 android/ 后，确认 RECORD_AUDIO（见下方）
+# 首次生成 android/ 后，确认 RECORD_AUDIO（见下方）；compileSdk/targetSdk 建议 35
 flutter pub get
 flutter run
 ```

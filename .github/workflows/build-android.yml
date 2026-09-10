@@ -21,9 +21,10 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # Plugins like record_android need Flutter >= 3.27 (flutter.compileSdkVersion on libraries).
       - uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.5"
+          flutter-version: "3.27.4"
           channel: stable
           cache: true
 
@@ -32,7 +33,7 @@ jobs:
           flutter create . --project-name agentdock_mobile --org com.agentdock --platforms=android
           flutter pub get
 
-      - name: Ensure mic + internet permissions + minSdk
+      - name: Patch Android SDK levels + permissions
         run: |
           python3 <<'PY'
           from pathlib import Path
@@ -50,8 +51,15 @@ jobs:
                   )
           manifest.write_text(text, encoding="utf-8")
 
-          # record / permission_handler need a modern minSdk
-          # Replace only the minSdk *line* (do not touch targetSdk).
+          # audioplayers needs compile/targetSdk >= 35; record needs minSdk >= 24
+          replacements = [
+              (r"(?m)^(\s*minSdk\s*=\s*).+$", r"\g<1>24"),
+              (r"(?m)^(\s*minSdkVersion\s+).+$", r"\g<1>24"),
+              (r"(?m)^(\s*compileSdk\s*=\s*).+$", r"\g<1>35"),
+              (r"(?m)^(\s*compileSdkVersion\s+).+$", r"\g<1>35"),
+              (r"(?m)^(\s*targetSdk\s*=\s*).+$", r"\g<1>35"),
+              (r"(?m)^(\s*targetSdkVersion\s+).+$", r"\g<1>35"),
+          ]
           for gradle in (
               Path("android/app/build.gradle"),
               Path("android/app/build.gradle.kts"),
@@ -59,20 +67,14 @@ jobs:
               if not gradle.exists():
                   continue
               g = gradle.read_text(encoding="utf-8")
-              g2, n1 = re.subn(
-                  r"(?m)^(\s*minSdk\s*=\s*).+$",
-                  r"\g<1>24",
-                  g,
-              )
-              g2, n2 = re.subn(
-                  r"(?m)^(\s*minSdkVersion\s+).+$",
-                  r"\g<1>24",
-                  g2,
-              )
-              gradle.write_text(g2, encoding="utf-8")
-              print(f"{gradle}: minSdk lines replaced={n1 + n2}")
-              for line in g2.splitlines():
-                  if "minSdk" in line or "targetSdk" in line:
+              total = 0
+              for pat, repl in replacements:
+                  g, n = re.subn(pat, repl, g)
+                  total += n
+              gradle.write_text(g, encoding="utf-8")
+              print(f"{gradle}: sdk lines replaced={total}")
+              for line in g.splitlines():
+                  if any(k in line for k in ("minSdk", "compileSdk", "targetSdk")):
                       print(" ", line.strip())
           print("permissions ok")
           PY
