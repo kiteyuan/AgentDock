@@ -1,0 +1,39 @@
+# AgentDock Pi Terminal Client
+#
+# Copy or symlink clients/shared/protocol.py beside this package when packaging.
+# On Pi: pip install -r requirements.txt && python -m device
+
+device_id: "pi-001"
+device_type: "pi"
+
+runtime_url: "ws://127.0.0.1:8765"   # use Tailscale IP when remote
+token: null
+
+tts_id: "edge"
+tts_model: "zh-CN-XiaoxiaoNeural"
+agent_id: null
+
+audio:
+  sample_rate: 16000
+  channels: 1
+  record_seconds: 5
+  chunk_ms: 100
+
+button:
+  # BCM GPIO pin for push-to-talk (null = console Enter key)
+  gpio_bcm: null
+  active_low: true
+
+display:
+  enabled: true
+  # ssd1306 | console
+  driver: "console"
+  i2c_port: 1
+  i2c_address: 0x3C
+  width: 128
+  height: 64
+
+heartbeat_seconds: 15
+reconnect:
+  retries: 20
+  base_delay: 1.0

@@ -1,0 +1,19 @@
+name: Pack Web UI (optional)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Zip clients/web
+        run: python scripts/pack_web.py -o dist/agentdock-web.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: agentdock-web
+          path: dist/agentdock-web.zip

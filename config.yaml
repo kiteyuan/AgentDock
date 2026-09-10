@@ -1,0 +1,90 @@
+server:
+  host: "0.0.0.0"
+  port: 8765
+  # LAN phone mic needs HTTPS page + wss. Default off so local http:// still works.
+  # Enable + restart Runtime/UI when ready:
+  #   tls: { enabled: true, cert: "certs/cert.pem", key: "certs/key.pem" }
+  tls:
+    enabled: false
+    cert: "certs/cert.pem"
+    key: "certs/key.pem"
+
+network:
+  advertise_url: null   # e.g. "ws://100.x.y.z:8765"
+
+# Speech recognition — ON by default
+stt:
+  provider: "whisper"
+  whisper:
+    model: "medium"         # medium 中文明显稳过 small；3080 仍可亚秒~2s
+    device: "cuda"
+    language: "zh"
+    beam_size: 5            # 提高准确率（比 1 慢一点）
+    vad_filter: true
+    code_switch: false
+    # 领域提示：减少「技能/智能」等同音误识
+    initial_prompt: "这是中文语音对话。常见词：技能、智能助手、编程、代码、Markdown、Agent、工具。"
+
+# TTS — Haibara (voices/) via GPT-SoVITS API; Edge as fallback
+tts:
+  default: "haibara"
+  providers:
+    haibara:
+      type: "gpt-sovits"
+      name: "Haibara"
+      voice_dir: "voices/Haibara"
+      url: "http://127.0.0.1:9880"
+      api: "v2"                 # v2: POST /tts ; v1: POST /
+      text_lang: "auto"         # 多语：auto；纯中文可改 zh / all_zh
+      load_weights: true
+      timeout: 120
+    edge:
+      type: "edge"
+      name: "Edge TTS"
+      voice: "zh-CN-XiaoxiaoNeural"
+      models:
+        - "zh-CN-XiaoxiaoNeural"
+        - "zh-CN-YunxiNeural"
+        - "zh-CN-XiaoyiNeural"
+        - "en-US-JennyNeural"
+    echo:
+      type: "echo"
+      name: "Echo (silent stub)"
+    # my-tts:
+    #   type: "http"
+    #   name: "My TTS"
+    #   url: "http://127.0.0.1:9000/tts"
+    #   model: "default"
+    #   models: ["default", "warm"]
+
+agent:
+  default: "pi"
+  agents:
+    mock:
+      type: "mock"
+    echo:
+      type: "echo"
+    pi:
+      type: "http"
+      name: "Pi Coding Agent"
+      url: "http://127.0.0.1:9001/v1/agent/run"
+      mode: "stream"
+      cancel_url: "http://127.0.0.1:9001/v1/agent/cancel"
+      capabilities: ["coding", "bash", "filesystem"]
+      timeout: 180
+    # Public Agent Protocol — local demo:
+    #   python agents/demo/server.py
+    #   python agents/check_link.py --url http://127.0.0.1:8080/v1/agent/run
+    http:
+      type: "http"
+      name: "Reference HTTP Agent"
+      url: "http://127.0.0.1:8080/v1/agent/run"
+      mode: "stream"          # stream | events | text | auto
+      # auth_token: "dev-token"  # or "${AGENT_TOKEN}"
+      # cancel_url: "http://127.0.0.1:8080/v1/agent/cancel"
+      capabilities: ["demo", "general"]
+      timeout: 120
+
+security:
+  require_token: false
+  tokens: []

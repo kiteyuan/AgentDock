@@ -1,0 +1,32 @@
+"""Client-side session states shared across Device terminals."""
+
+from __future__ import annotations
+
+from enum import Enum
+
+
+class ClientState(str, Enum):
+    OFFLINE = "offline"
+    CONNECTING = "connecting"
+    IDLE = "idle"
+    LISTENING = "listening"
+    BUSY = "busy"
+    SPEAKING = "speaking"
+    ERROR = "error"
+
+
+# Events that typically move idle/listening → busy (turn in progress).
+BUSY_EVENTS = frozenset({
+    "stt.partial",
+    "stt.final",
+    "agent.thinking",
+    "agent.tool_call",
+    "agent.tool_result",
+    "agent.message",
+})
+
+# Talk button enabled only in these states.
+CAN_TOGGLE_TALK = frozenset({
+    ClientState.IDLE,
+    ClientState.LISTENING,
+})

@@ -1,0 +1,33 @@
+# Pi Coding Agent（经 HTTP 网关对接 AgentDock）
+
+安装的是 [@earendil-works/pi-coding-agent](https://www.npmjs.com/package/@earendil-works/pi-coding-agent)。  
+Pi 原生是 stdio RPC/JSON，本目录的 `gateway.py` 把它转成 Agent Protocol。
+
+## 安装
+
+```bash
+cd agents/pi
+npm install
+```
+
+确保本机已配置 Pi 可用的模型凭据（`pi auth` / 环境变量）。本机若已能 `npx pi -p "hi" --mode json` 即可。
+
+## 启动网关
+
+```bash
+python agents/pi/gateway.py
+# default http://127.0.0.1:9000 — 本仓库 config 当前为 9001（PI_GATEWAY_PORT）
+# PI_GATEWAY_PORT=9001 python agents/pi/gateway.py
+```
+
+可选环境变量：`PI_PROVIDER`、`PI_MODEL`、`PI_NO_TOOLS=1`、`PI_GATEWAY_PORT`。
+
+## 联调
+
+```bash
+python agents/check_link.py --url http://127.0.0.1:9001/v1/agent/run --text "用一句话介绍你自己"
+
+# config.yaml → agent.default: pi （url 指向网关端口）
+python -m runtime.main
+python clients/desktop/main.py --text "你好" --agent pi
+```

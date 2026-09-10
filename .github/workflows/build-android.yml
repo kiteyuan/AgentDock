@@ -1,0 +1,65 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, master]
+    tags: ["client-v*"]
+  pull_request:
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/mobile
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.24.5"
+          channel: stable
+          cache: true
+
+      - name: Generate Android platform + deps
+        run: |
+          flutter create . --project-name agentdock_mobile --org com.agentdock --platforms=android
+          flutter pub get
+
+      - name: Ensure mic + internet permissions
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+          import re
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          text = p.read_text(encoding="utf-8")
+          for name in ("android.permission.INTERNET", "android.permission.RECORD_AUDIO"):
+              line = f'<uses-permission android:name="{name}"/>'
+              if name not in text:
+                  text = re.sub(
+                      r"(<manifest\b[^>]*>)",
+                      r"\1\n    " + line,
+                      text,
+                      count=1,
+                  )
+          p.write_text(text, encoding="utf-8")
+          print("permissions ok")
+          PY
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: agentdock-android
+          path: clients/mobile/build/app/outputs/flutter-apk/app-release.apk
+
+      - name: Attach APK to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/client-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: clients/mobile/build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

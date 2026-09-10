@@ -1,0 +1,11 @@
+websockets>=12.0
+pyyaml>=6.0
+loguru>=0.7
+numpy>=1.24
+sounddevice>=0.4
+soundfile>=0.12
+# Optional OLED (display.driver: ssd1306)
+# luma.oled>=3.12
+# pillow>=10.0
+# RPi.GPIO>=0.7
+# gpiozero>=2.0

@@ -1,0 +1,28 @@
+[project]
+name = "agentdock"
+version = "0.1.0"
+description = "An open-source Agent Bridge / Runtime that connects devices to agents through sessions and event streams."
+requires-python = ">=3.10"
+dependencies = [
+    "websockets>=12.0",
+    "pydantic>=2.0",
+    "pyyaml>=6.0",
+    "loguru>=0.7",
+    "faster-whisper>=1.0",
+    "edge-tts>=6.1",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4"]
+
+[project.scripts]
+# CLI keeps product name; Python package is functional `runtime`
+runtime = "runtime.main:main"
+agentdock = "runtime.main:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["runtime*"]
