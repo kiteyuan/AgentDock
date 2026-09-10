@@ -46,8 +46,12 @@ class WavRecorder {
 
   Future<void> cancel() async {
     try {
-      await _rec.stop();
-    } catch (_) {}
+      await _rec.cancel();
+    } catch (_) {
+      try {
+        await _rec.stop();
+      } catch (_) {}
+    }
     _path = null;
   }
 
