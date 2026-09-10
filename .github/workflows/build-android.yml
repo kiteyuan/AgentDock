@@ -32,6 +32,10 @@ jobs:
       - name: Generate Android platform + deps
         run: |
           flutter create . --project-name agentdock_mobile --org com.agentdock --platforms=android
+          # Do not keep the template MyApp smoke test if create ever drops one in.
+          if grep -q 'MyApp' test/widget_test.dart 2>/dev/null; then
+            git checkout -- test/widget_test.dart 2>/dev/null || true
+          fi
           flutter pub get
           flutter pub deps | head -n 80
 

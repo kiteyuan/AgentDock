@@ -170,10 +170,10 @@ class _HomePageState extends State<HomePage> {
                     shape: BoxShape.circle,
                     color: s.state == ClientState.listening
                         ? const Color(0xFFD45B5B)
-                        : accent.withOpacity(s.state.canToggleTalk ? 1 : 0.35),
+                        : accent.withValues(alpha: s.state.canToggleTalk ? 1 : 0.35),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.45),
+                        color: Colors.black.withValues(alpha: 0.45),
                         blurRadius: 18,
                         offset: const Offset(0, 8),
                       ),
