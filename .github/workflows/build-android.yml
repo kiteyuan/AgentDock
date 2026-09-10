@@ -14,7 +14,12 @@ jobs:
       run:
         working-directory: clients/mobile
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
 
       - uses: subosito/flutter-action@v2
         with:
@@ -27,31 +32,58 @@ jobs:
           flutter create . --project-name agentdock_mobile --org com.agentdock --platforms=android
           flutter pub get
 
-      - name: Ensure mic + internet permissions
+      - name: Ensure mic + internet permissions + minSdk
         run: |
           python3 <<'PY'
           from pathlib import Path
           import re
-          p = Path("android/app/src/main/AndroidManifest.xml")
-          text = p.read_text(encoding="utf-8")
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text(encoding="utf-8")
           for name in ("android.permission.INTERNET", "android.permission.RECORD_AUDIO"):
-              line = f'<uses-permission android:name="{name}"/>'
               if name not in text:
                   text = re.sub(
                       r"(<manifest\b[^>]*>)",
-                      r"\1\n    " + line,
+                      rf'\1\n    <uses-permission android:name="{name}"/>',
                       text,
                       count=1,
                   )
-          p.write_text(text, encoding="utf-8")
+          manifest.write_text(text, encoding="utf-8")
+
+          # record / permission_handler need a modern minSdk
+          for gradle in (
+              Path("android/app/build.gradle"),
+              Path("android/app/build.gradle.kts"),
+          ):
+              if not gradle.exists():
+                  continue
+              g = gradle.read_text(encoding="utf-8")
+              g2 = re.sub(
+                  r"minSdk\s*=\s*\w+",
+                  "minSdk = 24",
+                  g,
+              )
+              g2 = re.sub(
+                  r"minSdkVersion\s+\w+",
+                  "minSdkVersion 24",
+                  g2,
+              )
+              if g2 != g:
+                  gradle.write_text(g2, encoding="utf-8")
+                  print(f"updated minSdk in {gradle}")
+              else:
+                  print(f"no minSdk rewrite needed in {gradle}")
           print("permissions ok")
           PY
+
+      - name: Flutter doctor
+        run: flutter doctor -v
 
       - name: Build release APK
         run: flutter build apk --release
 
       - name: Upload APK
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: agentdock-android
           path: clients/mobile/build/app/outputs/flutter-apk/app-release.apk
