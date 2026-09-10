@@ -51,6 +51,7 @@ jobs:
           manifest.write_text(text, encoding="utf-8")
 
           # record / permission_handler need a modern minSdk
+          # Replace only the minSdk *line* (do not touch targetSdk).
           for gradle in (
               Path("android/app/build.gradle"),
               Path("android/app/build.gradle.kts"),
@@ -58,21 +59,21 @@ jobs:
               if not gradle.exists():
                   continue
               g = gradle.read_text(encoding="utf-8")
-              g2 = re.sub(
-                  r"minSdk\s*=\s*\w+",
-                  "minSdk = 24",
+              g2, n1 = re.subn(
+                  r"(?m)^(\s*minSdk\s*=\s*).+$",
+                  r"\g<1>24",
                   g,
               )
-              g2 = re.sub(
-                  r"minSdkVersion\s+\w+",
-                  "minSdkVersion 24",
+              g2, n2 = re.subn(
+                  r"(?m)^(\s*minSdkVersion\s+).+$",
+                  r"\g<1>24",
                   g2,
               )
-              if g2 != g:
-                  gradle.write_text(g2, encoding="utf-8")
-                  print(f"updated minSdk in {gradle}")
-              else:
-                  print(f"no minSdk rewrite needed in {gradle}")
+              gradle.write_text(g2, encoding="utf-8")
+              print(f"{gradle}: minSdk lines replaced={n1 + n2}")
+              for line in g2.splitlines():
+                  if "minSdk" in line or "targetSdk" in line:
+                      print(" ", line.strip())
           print("permissions ok")
           PY
 
