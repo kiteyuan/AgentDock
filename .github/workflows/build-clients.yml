@@ -126,7 +126,23 @@ jobs:
           fi
           flutter pub get
 
-      - run: flutter build windows --release
+      # windows-latest has VS 2022 only; Flutter/CMake may still pick "Visual Studio 16 2019"
+      - name: Select Visual Studio 2022 for CMake
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $inst = & $vswhere -latest -products * `
+            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
+            -property installationPath
+          if (-not $inst) { throw "Visual Studio with C++ tools not found" }
+          "CMAKE_GENERATOR=Visual Studio 17 2022" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "CMAKE_GENERATOR_INSTANCE=$inst" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "CMAKE_GENERATOR=Visual Studio 17 2022"
+          Write-Host "CMAKE_GENERATOR_INSTANCE=$inst"
+
+      - name: Build Windows release
+        shell: bash
+        run: flutter build windows --release
 
       - name: Zip Windows release
         shell: bash
@@ -171,11 +187,14 @@ jobs:
           fi
           flutter pub get
 
-      - name: Patch macOS mic / network entitlements
+      - name: Patch macOS mic / network + deployment target
         run: |
           python3 <<'PY'
           from pathlib import Path
           import re
+
+          # audioplayers_darwin requires macOS 10.15+
+          MACOS_MIN = "10.15"
 
           info = Path("macos/Runner/Info.plist")
           if info.exists():
@@ -208,7 +227,31 @@ jobs:
                       1,
                   )
                   ent.write_text(t, encoding="utf-8")
-          print("macos patch ok")
+
+          for pbx in Path("macos").rglob("*.pbxproj"):
+              t = pbx.read_text(encoding="utf-8")
+              t2, n = re.subn(
+                  r"MACOSX_DEPLOYMENT_TARGET = [\d.]+;",
+                  f"MACOSX_DEPLOYMENT_TARGET = {MACOS_MIN};",
+                  t,
+              )
+              if n:
+                  pbx.write_text(t2, encoding="utf-8")
+
+          podfile = Path("macos/Podfile")
+          if podfile.exists():
+              t = podfile.read_text(encoding="utf-8")
+              if re.search(r"platform\s+:osx", t):
+                  t = re.sub(
+                      r"platform\s+:osx,?\s*'[\d.]+'",
+                      f"platform :osx, '{MACOS_MIN}'",
+                      t,
+                  )
+              else:
+                  t = f"platform :osx, '{MACOS_MIN}'\n" + t
+              podfile.write_text(t, encoding="utf-8")
+
+          print(f"macos patch ok (deployment {MACOS_MIN})")
           PY
 
       - run: flutter build macos --release
@@ -255,10 +298,14 @@ jobs:
           fi
           flutter pub get
 
-      - name: Patch iOS microphone usage
+      - name: Patch iOS microphone + deployment target
         run: |
           python3 <<'PY'
           from pathlib import Path
+          import re
+
+          # audioplayers_darwin requires iOS 13.0+
+          IOS_MIN = "13.0"
 
           info = Path("ios/Runner/Info.plist")
           text = info.read_text(encoding="utf-8")
@@ -271,7 +318,33 @@ jobs:
                   1,
               )
               info.write_text(text, encoding="utf-8")
-          print("ios patch ok")
+
+          for pbx in Path("ios").rglob("*.pbxproj"):
+              t = pbx.read_text(encoding="utf-8")
+              t2, n = re.subn(
+                  r"IPHONEOS_DEPLOYMENT_TARGET = [\d.]+;",
+                  f"IPHONEOS_DEPLOYMENT_TARGET = {IOS_MIN};",
+                  t,
+              )
+              if n:
+                  pbx.write_text(t2, encoding="utf-8")
+
+          podfile = Path("ios/Podfile")
+          if podfile.exists():
+              t = podfile.read_text(encoding="utf-8")
+              if re.search(r"^#?\s*platform\s+:ios", t, flags=re.M):
+                  t = re.sub(
+                      r"^#?\s*platform\s+:ios,?\s*'[\d.]+'",
+                      f"platform :ios, '{IOS_MIN}'",
+                      t,
+                      count=1,
+                      flags=re.M,
+                  )
+              else:
+                  t = f"platform :ios, '{IOS_MIN}'\n" + t
+              podfile.write_text(t, encoding="utf-8")
+
+          print(f"ios patch ok (deployment {IOS_MIN})")
           PY
 
       - name: Build iOS (no codesign)
