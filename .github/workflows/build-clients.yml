@@ -104,7 +104,8 @@ jobs:
   windows:
     name: Windows
     if: github.event_name != 'pull_request'
-    runs-on: windows-latest
+    # windows-latest is VS 2026-only; Flutter 3.27.x cannot map VS 18 and falls back to VS 2019.
+    runs-on: windows-2022
     defaults:
       run:
         working-directory: clients/mobile
@@ -125,20 +126,6 @@ jobs:
             git checkout -- test/widget_test.dart 2>/dev/null || true
           fi
           flutter pub get
-
-      # windows-latest has VS 2022 only; Flutter/CMake may still pick "Visual Studio 16 2019"
-      - name: Select Visual Studio 2022 for CMake
-        shell: pwsh
-        run: |
-          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-          $inst = & $vswhere -latest -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath
-          if (-not $inst) { throw "Visual Studio with C++ tools not found" }
-          "CMAKE_GENERATOR=Visual Studio 17 2022" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          "CMAKE_GENERATOR_INSTANCE=$inst" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "CMAKE_GENERATOR=Visual Studio 17 2022"
-          Write-Host "CMAKE_GENERATOR_INSTANCE=$inst"
 
       - name: Build Windows release
         shell: bash
