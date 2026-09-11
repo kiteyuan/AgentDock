@@ -1,4 +1,4 @@
-﻿"""Device Gateway — WebSocket entry for Device Protocol."""
+"""Device Gateway — WebSocket entry for Device Protocol."""
 
 from __future__ import annotations
 
@@ -12,10 +12,12 @@ from runtime.agent.registry import AgentRegistry
 from runtime.bridge.bus import EventBus
 from runtime.bridge.pipeline import BridgePipeline
 from runtime.device.connection import DeviceConnection
+from runtime.pets import list_pets
 from runtime.protocol.device import (
     DeviceMessageType,
     agents_list_result,
     error_msg,
+    pets_list_result,
     pong,
     session_accept,
     stt_final,
@@ -42,8 +44,9 @@ class DeviceGateway:
         tts_registry: TTSRegistry,
         stt: STTProvider | None = None,
         advertise_url: str | None = None,
-        ssl_cert: str | Path | None = None,
-        ssl_key: str | Path | None = None,
+        pets_root: Path | None = None,
+        assets_port: int | None = None,
+        assets_base_url: str | None = None,
     ) -> None:
         self.host = host
         self.port = port
@@ -54,19 +57,12 @@ class DeviceGateway:
         self.tts_registry = tts_registry
         self.stt = stt
         self.advertise_url = advertise_url
-        self.ssl_cert = Path(ssl_cert) if ssl_cert else None
-        self.ssl_key = Path(ssl_key) if ssl_key else None
+        self.pets_root = pets_root
+        self.assets_port = assets_port
+        self.assets_base_url = assets_base_url
 
     async def start(self) -> None:
-        ssl_ctx = None
-        scheme = "ws"
-        if self.ssl_cert and self.ssl_key:
-            import ssl
-
-            ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            ssl_ctx.load_cert_chain(certfile=str(self.ssl_cert), keyfile=str(self.ssl_key))
-            scheme = "wss"
-        logger.info("DeviceGateway on {}://{}:{}", scheme, self.host, self.port)
+        logger.info("DeviceGateway on ws://{}:{}", self.host, self.port)
         if self.advertise_url:
             logger.info("Advertise URL (Tailscale/public): {}", self.advertise_url)
         async with websockets.serve(
@@ -74,7 +70,6 @@ class DeviceGateway:
             self.host,
             self.port,
             max_size=16 * 1024 * 1024,
-            ssl=ssl_ctx,
         ):
             await asyncio.Future()
 
@@ -129,6 +124,8 @@ class DeviceGateway:
                         device_id,
                         advertise_url=self.advertise_url,
                         tts_id=conn.session.tts_id,
+                        assets_port=self.assets_port,
+                        assets_base_url=self.assets_base_url,
                     )
                 )
             )
@@ -147,6 +144,23 @@ class DeviceGateway:
             await conn.send(
                 encode_message(
                     tts_list_result(self.tts_registry.list_dicts(), self.tts_registry.default_id)
+                )
+            )
+            return turn_task
+
+        if msg.type == DeviceMessageType.PETS_LIST:
+            pets: list = []
+            default_id = None
+            if self.pets_root is not None:
+                pets, default_id = list_pets(self.pets_root)
+            await conn.send(
+                encode_message(
+                    pets_list_result(
+                        pets,
+                        default_id=default_id,
+                        base_url=self.assets_base_url,
+                        assets_port=self.assets_port,
+                    )
                 )
             )
             return turn_task

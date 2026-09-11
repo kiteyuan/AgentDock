@@ -32,7 +32,7 @@ AgentDock  ws://127.0.0.1:8765
 
 ```bash
 pip install -e .
-python -m runtime.main
+python -m runtime
 ```
 
 确认本机可以：
@@ -129,7 +129,7 @@ cloudflared service install
 
 保持两件事同时在线：
 
-1. `python -m runtime.main`
+1. `python -m runtime`
 2. `cloudflared tunnel run agentdock`
 
 ---
@@ -164,18 +164,18 @@ security:
 桌面 / 调试：
 
 ```bash
-cd clients/desktop
+cd clients/cli
 python main.py --url wss://dock.example.com --token "换成很长的随机串-手机用" --text "你好"
 ```
 
 Web UI（`clients/web`）：
 
-1. `python clients/desktop/main.py --ui`（或 `cd clients/web && python -m http.server 8090`）
+1. `python clients/cli/main.py --ui`（或 `cd clients/web && python -m http.server 8090`）
 2. Runtime URL 填：`wss://dock.example.com`
 3. Token 填上面那串
 4. 连接 → **点击通话开始，再点结束**
 
-Pi（`clients/pi/config.yaml`）：
+Pi（`clients/rpi/config.yaml`）：
 
 ```yaml
 runtime_url: "wss://dock.example.com"
@@ -229,7 +229,7 @@ Dashboard → Zero Trust → Access → Applications：
 Token 不一致，或没开 `require_token` 时客户端多传了错误 token（少见）。对齐 `config.yaml` 与 `--token`。
 
 **手机页面是 http，连 wss 被拦**  
-部分浏览器对「非安全页连 WSS」有限制。页面尽量也放在 HTTPS 下，或先用桌面 client 验证 Tunnel 本身没问题。
+部分浏览器对「非安全页连 WSS」有限制。Tunnel 联调优先用桌面 CLI / 本机 Web 预览，或 Flutter 客户端；不必再给局域网 Web 配自签证书。
 
 **想用路径 `/ws`**  
 当前 Runtime 监听根路径 WebSocket。要么客户端仍连 `wss://dock.example.com/`，要么在前面再加一层会做路径剥离的反代；Cloudflare Tunnel 直指 8765 时，用根域名最简单。

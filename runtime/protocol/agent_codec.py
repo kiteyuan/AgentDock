@@ -1,4 +1,4 @@
-﻿"""Encode / decode public Agent Protocol wire formats (agentdock.agent/1.0)."""
+"""Encode / decode public Agent Protocol wire formats (agentdock.agent/1.0)."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from runtime.protocol.agent import (
 
 def request_to_http_body(request: AgentRequest, *, stream: bool = True) -> dict[str, Any]:
     """Canonical POST body Runtime sends to a public Agent."""
-    return {
+    body: dict[str, Any] = {
         "protocol": PROTOCOL_VERSION,
         "session_id": request.session_id,
         "text": request.text,
@@ -27,6 +27,9 @@ def request_to_http_body(request: AgentRequest, *, stream: bool = True) -> dict[
         "agent_id": request.agent_id,
         "stream": stream,
     }
+    if request.workspace:
+        body["workspace"] = request.workspace
+    return body
 
 
 def parse_event(session_id: str, item: Any) -> AgentEvent | None:

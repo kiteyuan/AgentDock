@@ -1,4 +1,4 @@
-﻿"""AgentDock Runtime entry point."""
+"""AgentDock Runtime entry point."""
 
 from __future__ import annotations
 

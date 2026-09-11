@@ -24,6 +24,6 @@ tts:
       url: http://127.0.0.1:9880
 ```
 
-客户端：`python main.py --record 5 --tts haibara`
+客户端：设置里从 `tts.list` 下拉选择（见 [`../clients/CUSTOM_ASSETS.md`](../clients/CUSTOM_ASSETS.md)）。
 
 若 API 未启动，Runtime 会自动回退到 Edge TTS（仍会先做口语清洗，避免念 Markdown/emoji）。

@@ -7,6 +7,6 @@
 - 点击角色开/关收音；下方回复流式显示
 
 ```bash
-python -m runtime.main
-python clients/desktop/main.py --ui
+python -m runtime
+python clients/cli/main.py --ui
 ```

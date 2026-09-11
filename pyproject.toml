@@ -16,9 +16,7 @@ dependencies = [
 dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.4"]
 
 [project.scripts]
-# CLI keeps product name; Python package is functional `runtime`
 runtime = "runtime.main:main"
-agentdock = "runtime.main:main"
 
 [build-system]
 requires = ["setuptools>=68"]

@@ -1,10 +1,11 @@
 import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../session/client_state.dart';
+import 'pet_catalog.dart';
 
 /// Codex Pet atlas — same grid as clients/web/pixel-bot.js
 class PixelBot extends StatefulWidget {
@@ -17,19 +18,6 @@ class PixelBot extends StatefulWidget {
   final ClientState mood;
   final String petId;
 
-  static const cellW = 192.0;
-  static const cellH = 208.0;
-
-  static const pets = <String, String>{
-    'monthly-salary-cat': 'assets/sprites/monthly-salary-cat/spritesheet.webp',
-    'arona-v1': 'assets/sprites/arona-v1/spritesheet.webp',
-  };
-
-  static const petLabels = <String, String>{
-    'monthly-salary-cat': 'Monthly salary cat',
-    'arona-v1': 'Arona',
-  };
-
   @override
   State<PixelBot> createState() => _PixelBotState();
 }
@@ -38,6 +26,9 @@ class _PixelBotState extends State<PixelBot> {
   ui.Image? _sheet;
   int _tick = 0;
   Timer? _timer;
+
+  static const cellW = PixelBotMetrics.cellW;
+  static const cellH = PixelBotMetrics.cellH;
 
   static const _row = {
     'idle': 0,
@@ -92,18 +83,21 @@ class _PixelBotState extends State<PixelBot> {
   }
 
   Future<void> _load(String petId) async {
-    final path = PixelBot.pets[petId] ?? PixelBot.pets['monthly-salary-cat']!;
-    final data = await rootBundle.load(path);
-    final codec = await ui.instantiateImageCodec(data.buffer.asUint8List());
-    final frame = await codec.getNextFrame();
-    if (!mounted) {
-      frame.image.dispose();
-      return;
+    try {
+      final bytes = await PetCatalog.loadSheetBytes(petId);
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      if (!mounted) {
+        frame.image.dispose();
+        return;
+      }
+      setState(() {
+        _sheet?.dispose();
+        _sheet = frame.image;
+      });
+    } catch (e) {
+      debugPrint('PixelBot load failed: $e');
     }
-    setState(() {
-      _sheet?.dispose();
-      _sheet = frame.image;
-    });
   }
 
   @override
@@ -117,7 +111,7 @@ class _PixelBotState extends State<PixelBot> {
   Widget build(BuildContext context) {
     final phase = (_tick % 2).toDouble();
     Widget sprite = CustomPaint(
-      size: const Size(PixelBot.cellW, PixelBot.cellH),
+      size: const Size(cellW, cellH),
       painter: _SheetPainter(
         sheet: _sheet,
         row: _moodRow(widget.mood),
@@ -139,13 +133,18 @@ class _PixelBotState extends State<PixelBot> {
     }
 
     return AspectRatio(
-      aspectRatio: PixelBot.cellW / PixelBot.cellH,
+      aspectRatio: cellW / cellH,
       child: FittedBox(
         fit: BoxFit.contain,
         child: sprite,
       ),
     );
   }
+}
+
+class PixelBotMetrics {
+  static const cellW = 192.0;
+  static const cellH = 208.0;
 }
 
 class _SheetPainter extends CustomPainter {
@@ -168,10 +167,10 @@ class _SheetPainter extends CustomPainter {
     final n = frames[row] ?? 1;
     final col = tick % n;
     final src = Rect.fromLTWH(
-      col * PixelBot.cellW,
-      row * PixelBot.cellH,
-      PixelBot.cellW,
-      PixelBot.cellH,
+      col * PixelBotMetrics.cellW,
+      row * PixelBotMetrics.cellH,
+      PixelBotMetrics.cellW,
+      PixelBotMetrics.cellH,
     );
     final dst = Offset.zero & size;
     final paint = Paint()..filterQuality = FilterQuality.none;

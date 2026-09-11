@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../session/client_state.dart';
 import '../session/device_session.dart';
 import 'pixel_bot.dart';
+import 'pet_catalog.dart';
 import 'theme.dart';
 
 /// Layout aligned with clients/web: centered pet + 3-line reply; tap talk / long-press settings.
@@ -22,7 +23,7 @@ class HomePage extends StatefulWidget {
 class _HomePageState extends State<HomePage> {
   late final TextEditingController _url;
   late final TextEditingController _token;
-  late final TextEditingController _tts;
+  // TTS is a dropdown driven by Runtime tts.list — keep selected id on session.
   final _replyScroll = ScrollController();
   StreamSubscription? _sub;
   bool _holdOpenedSettings = false;
@@ -35,7 +36,6 @@ class _HomePageState extends State<HomePage> {
     super.initState();
     _url = TextEditingController(text: s.url);
     _token = TextEditingController(text: s.token);
-    _tts = TextEditingController(text: s.ttsId);
     _sub = s.changes.listen((_) {
       if (!mounted) return;
       setState(() {});
@@ -56,16 +56,16 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> _loadPrefs() async {
+    await PetCatalog.ensureLoaded();
     final p = await SharedPreferences.getInstance();
     s.url = p.getString('url') ?? s.url;
     s.token = p.getString('token') ?? '';
     s.ttsId = p.getString('tts') ?? 'haibara';
-    s.petId = p.getString('pet') ?? 'monthly-salary-cat';
+    s.petId = PetCatalog.resolveId(p.getString('pet'));
     final last = p.getString('reply') ?? '';
     if (last.isNotEmpty && s.replyText.isEmpty) s.replyText = last;
     _url.text = s.url;
     _token.text = s.token;
-    _tts.text = s.ttsId;
     setState(() {});
   }
 
@@ -81,12 +81,28 @@ class _HomePageState extends State<HomePage> {
   Future<void> _openSettings() async {
     _url.text = s.url;
     _token.text = s.token;
-    _tts.text = s.ttsId;
     await showDialog<void>(
       context: context,
       barrierColor: Colors.black54,
       builder: (ctx) {
-        String pet = s.petId;
+        String pet = PetCatalog.resolveId(s.petId);
+        String tts = s.ttsId;
+        final ttsItems = <DropdownMenuItem<String>>[
+          for (final p in s.ttsProviders)
+            if ((p['id'] as String? ?? '').isNotEmpty)
+              DropdownMenuItem(
+                value: p['id'] as String,
+                child: Text(
+                  p['name'] != null ? '${p['name']} (${p['id']})' : '${p['id']}',
+                ),
+              ),
+        ];
+        if (ttsItems.isEmpty) {
+          ttsItems.add(DropdownMenuItem(value: tts.isEmpty ? 'haibara' : tts, child: Text(tts.isEmpty ? 'haibara' : tts)));
+        }
+        if (!ttsItems.any((e) => e.value == tts)) {
+          tts = ttsItems.first.value ?? tts;
+        }
         return StatefulBuilder(
           builder: (ctx, setLocal) {
             return Dialog(
@@ -140,26 +156,9 @@ class _HomePageState extends State<HomePage> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    _label('TTS'),
-                    TextField(
-                      controller: _tts,
-                      style: const TextStyle(color: WebUiTheme.text, fontSize: 13),
-                      decoration: const InputDecoration(
-                        isDense: true,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.zero,
-                          borderSide: BorderSide(color: WebUiTheme.line),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.zero,
-                          borderSide: BorderSide(color: WebUiTheme.line),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    _label('角色'),
+                    _label('TTS（主机 voices/ + config）'),
                     DropdownButtonFormField<String>(
-                      value: PixelBot.pets.containsKey(pet) ? pet : 'monthly-salary-cat',
+                      value: tts,
                       dropdownColor: WebUiTheme.panel,
                       style: const TextStyle(color: WebUiTheme.text, fontSize: 13),
                       decoration: const InputDecoration(
@@ -173,8 +172,31 @@ class _HomePageState extends State<HomePage> {
                           borderSide: BorderSide(color: WebUiTheme.line),
                         ),
                       ),
-                      items: PixelBot.petLabels.entries
-                          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value)))
+                      items: ttsItems,
+                      onChanged: (v) {
+                        if (v == null) return;
+                        setLocal(() => tts = v);
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    _label('角色（主机 pets/ → 本机缓存）'),
+                    DropdownButtonFormField<String>(
+                      value: pet,
+                      dropdownColor: WebUiTheme.panel,
+                      style: const TextStyle(color: WebUiTheme.text, fontSize: 13),
+                      decoration: const InputDecoration(
+                        isDense: true,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.zero,
+                          borderSide: BorderSide(color: WebUiTheme.line),
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.zero,
+                          borderSide: BorderSide(color: WebUiTheme.line),
+                        ),
+                      ),
+                      items: PetCatalog.pets.entries
+                          .map((e) => DropdownMenuItem(value: e.key, child: Text(e.value.label)))
                           .toList(),
                       onChanged: (v) {
                         if (v == null) return;
@@ -194,8 +216,8 @@ class _HomePageState extends State<HomePage> {
                             onPressed: () async {
                               s.url = _url.text.trim();
                               s.token = _token.text;
-                              s.ttsId = _tts.text.trim().isEmpty ? 'haibara' : _tts.text.trim();
-                              s.petId = pet;
+                              s.ttsId = tts.trim().isEmpty ? (s.ttsDefaultId ?? 'haibara') : tts.trim();
+                              s.petId = PetCatalog.resolveId(pet);
                               await _savePrefs();
                               if (ctx.mounted) Navigator.pop(ctx);
                               await s.connect();
@@ -273,7 +295,6 @@ class _HomePageState extends State<HomePage> {
     _sub?.cancel();
     _url.dispose();
     _token.dispose();
-    _tts.dispose();
     _replyScroll.dispose();
     super.dispose();
   }
@@ -316,6 +337,7 @@ class _HomePageState extends State<HomePage> {
                             maxHeight: MediaQuery.sizeOf(context).height * 0.52,
                           ),
                           child: PixelBot(
+                            key: ValueKey('${s.petId}-${s.petsEpoch}'),
                             mood: s.state,
                             petId: s.petId,
                           ),

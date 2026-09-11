@@ -1,4 +1,4 @@
-﻿"""Event bus — push AgentEvents to a Device connection sender."""
+"""Event bus — push AgentEvents to a Device connection sender."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿"""Bridge pipeline — one turn: intent → route → agent.run → events → device (+ optional TTS)."""
+"""Bridge pipeline — one turn: intent → route → agent.run → events → device (+ optional TTS)."""
 
 from __future__ import annotations
 
@@ -21,9 +21,12 @@ class BridgePipeline:
         self,
         router: AgentRouter,
         tts_registry: TTSRegistry | None = None,
+        *,
+        workspace: str | None = None,
     ) -> None:
         self.router = router
         self.tts_registry = tts_registry or TTSRegistry()
+        self.workspace = workspace
 
     async def _synthesize_segment(
         self,
@@ -108,6 +111,7 @@ class BridgePipeline:
             context=list(session.context),
             device=session.device_info(),
             agent_id=adapter.info.id,
+            workspace=self.workspace,
             cancel_event=session.cancel_event,
         )
 

@@ -1,4 +1,4 @@
-﻿"""Echo Agent — minimal event stream."""
+"""Echo Agent — minimal event stream."""
 
 from __future__ import annotations
 

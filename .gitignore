@@ -11,14 +11,19 @@ build/
 *.mp3
 .pytest_cache/
 node_modules/
-agents/pi/package-lock.json
-agents/pi/.agentdock-sessions/
+agents/pi-coding/package-lock.json
+agents/pi-coding/.agentdock-sessions/
+agents/codex/.agentdock-sessions/
+agents/claude-code/.agentdock-sessions/
+
+# Personal agent workspace / Obsidian vault (local only)
+workspace/
 
 # Local overrides (put real tokens / LAN URLs here)
 config.local.yaml
 **/config.local.yaml
 
-# TLS private material (also certs/.gitignore *.pem)
+# Private keys / accidental PEM dumps
 *.pem
 *.key
 *.p12

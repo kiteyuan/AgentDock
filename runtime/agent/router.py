@@ -1,4 +1,4 @@
-﻿"""Agent Router — select which adapter handles a request."""
+"""Agent Router — select which adapter handles a request."""
 
 from __future__ import annotations
 

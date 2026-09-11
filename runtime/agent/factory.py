@@ -1,4 +1,4 @@
-﻿"""Build AgentAdapter instances from config (built-in + import path plugins)."""
+"""Build AgentAdapter instances from config (built-in + import path plugins)."""
 
 from __future__ import annotations
 

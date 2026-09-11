@@ -9,8 +9,8 @@
 
 ```bash
 cd clients/mobile
-flutter create . --project-name agentdock_mobile --org com.agentdock --platforms=android
-# 首次生成 android/ 后，确认 RECORD_AUDIO（见下方）；compileSdk/targetSdk 建议 35
+flutter create . --project-name agentdock_mobile --org com.agentdock --platforms=android,ios,windows,macos
+# 首次生成平台目录后，确认麦克风权限（见下方）；Android compileSdk/targetSdk 建议 35
 flutter pub get
 flutter run
 ```
@@ -30,15 +30,24 @@ flutter run
 <uses-permission android:name="android.permission.RECORD_AUDIO"/>
 ```
 
-CI 的 `build-android.yml` 会在 `flutter create` 后自动补上。
+CI 会在 `flutter create` 后自动补上。
 
-## 打包
+## 打包（GitHub Actions）
 
-GitHub Actions：`.github/workflows/build-android.yml` → Release APK 附件。
+工作流：[`.github/workflows/build-clients.yml`](../../.github/workflows/build-clients.yml)
+
+| Artifact | 说明 |
+|----------|------|
+| `agentdock-android` | Release APK |
+| `agentdock-windows` | Windows Release 目录 zip |
+| `agentdock-macos` | `.app` zip（未公证） |
+| `agentdock-ios-unsigned` | 未签名 IPA，给 **巨魔 / 侧载**（非 App Store） |
 
 ```bash
 flutter build apk --release
-# 产物：build/app/outputs/flutter-apk/app-release.apk
+flutter build windows --release
+flutter build macos --release
+flutter build ios --release --no-codesign   # 再打成 Payload/*.ipa
 ```
 
 ## 目录

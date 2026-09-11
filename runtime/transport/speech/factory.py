@@ -1,4 +1,4 @@
-﻿"""Build TTS providers from config."""
+"""Build TTS providers from config."""
 
 from __future__ import annotations
 

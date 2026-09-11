@@ -1,4 +1,4 @@
-﻿"""Mock Agent — full multi-step event stream for bridge tests."""
+"""Mock Agent — full multi-step event stream for bridge tests."""
 
 from __future__ import annotations
 

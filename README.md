@@ -9,21 +9,24 @@ AgentDock 是一个开源 **Agent Bridge / Runtime**：通过 Session 与 Event 
 统一客户端 UI：
 
 ```bash
-python clients/desktop/main.py --ui
+python clients/cli/main.py --ui
 # 点击通话开始收音，再点结束
 ```
 
 ## 目录（按功能）
 
 ```text
-runtime/          # 后端服务：协议、会话、Agent 适配、STT/TTS、网关
+runtime/          # 后端服务（Python 包）：协议、会话、Agent 适配、STT/TTS、网关
 clients/          # 瘦终端（只连 WS；不算模型）
   web/            # 桌面预览 UI
-  desktop/        # 启动 Web UI + CLI 调试
-  pi/             # 树莓派随身终端
+  cli/            # 启动 Web UI + CLI 调试
+  rpi/            # 树莓派随身终端
   mobile/         # Flutter 手机 App
   shared/         # 协议 / 状态机 / TurnView
-agents/           # 本地安装 / 联调外部 Agent（demo + check_link）
+agents/           # 本地安装 / 联调外部 Agent（demo + pi-coding + check_link）
+workspace/        # 个人 Agent 工作区 / Obsidian 库（gitignore，不入库）
+examples/         # 示例：obsidian-starter 等
+pets/             # 主机角色包（客户端下载后缓存）
 voices/           # TTS 音色资源（如 Haibara）
 docs/             # 文档
 tests/            # 测试
@@ -33,7 +36,7 @@ config.yaml       # Runtime 配置
 ## 完整链路
 
 ```text
-clients/*  ──WebSocket──►  runtime  ──Agent Protocol──►  外部 Agent
+clients/*  ──WebSocket──►  runtime    ──Agent Protocol──►  外部 Agent
                               │
                          STT / TTS
                               │
@@ -45,14 +48,14 @@ clients/*  ◄──事件 + 语音────┘
 ```bash
 # Runtime（后端）
 pip install -e .
-python -m runtime.main
-# 或：runtime / agentdock
+python -m runtime
+# 或：runtime
 
 # 统一 Web UI（另一终端）
-python clients/desktop/main.py --ui
+python clients/cli/main.py --ui
 
 # CLI 调试
-cd clients/desktop
+cd clients/cli
 pip install -r requirements.txt
 python main.py --chat --agent pi --tts haibara
 python main.py --text "帮我整理桌面的文件"
@@ -68,7 +71,7 @@ python agents/demo/server.py
 python agents/check_link.py --url http://127.0.0.1:8080/v1/agent/run
 
 # config.yaml → agent.default: http
-python clients/desktop/main.py --text "你好" --agent http
+python clients/cli/main.py --text "你好" --agent http
 ```
 
 安装与联调说明：[`agents/README.md`](./agents/README.md) · 协议：[`docs/AGENT_PROTOCOL.md`](./docs/AGENT_PROTOCOL.md)。
@@ -88,17 +91,27 @@ python clients/desktop/main.py --text "你好" --agent http
 | 客户端 | 路径 | 说明 |
 |--------|------|------|
 | Web UI | [`clients/web/`](./clients/web/) | 桌面预览：状态 / 回复 / 点击通话 |
-| 桌面 | [`clients/desktop/`](./clients/desktop/) | `--ui` 打开 Web；`--chat` CLI |
-| 树莓派 | [`clients/pi/`](./clients/pi/) | 按键点开点停 / OLED |
+| CLI | [`clients/cli/`](./clients/cli/) | `--ui` 打开 Web；`--chat` 调试 |
+| 树莓派 | [`clients/rpi/`](./clients/rpi/) | 按键点开点停 / OLED |
 | 手机 | [`clients/mobile/`](./clients/mobile/) | Flutter：原生麦 + `ws://主机:8765` |
 
 ```bash
 cd clients/web && python -m http.server 8090
-cd clients/pi && pip install -r requirements.txt && python -m device
-cd clients/mobile && flutter run   # 需本机 Flutter；APK 见 GitHub Actions
+cd clients/rpi && pip install -r requirements.txt && python -m device
+cd clients/mobile && flutter run   # 需本机 Flutter；多端产物见 GitHub Actions Build Clients
 ```
 
 总览：[`clients/README.md`](./clients/README.md) · [`docs/DEVICES.md`](./docs/DEVICES.md) · [`docs/TECH_PLAN.md`](./docs/TECH_PLAN.md)
+
+## 资源与署名
+
+| 资源 | 来源 | 说明 |
+|------|------|------|
+| 角色（Pet） | [codex-pets.net](https://codex-pets.net) 社区 Codex Pet | 默认包见 `pets/`；详情与加包：[`pets/README.md`](./pets/README.md)、[`clients/CUSTOM_ASSETS.md`](./clients/CUSTOM_ASSETS.md) |
+| TTS Haibara | 本机 GPT-SoVITS 音色包（权重不入库） | 放置与配置：[`voices/Haibara/README.md`](./voices/Haibara/README.md) |
+| TTS Edge | Microsoft Edge TTS | `config.yaml` 可选用，无需本地模型 |
+
+自定义角色 / 音色流程以 [`clients/CUSTOM_ASSETS.md`](./clients/CUSTOM_ASSETS.md) 为准。
 
 ## License
 

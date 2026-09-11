@@ -1,4 +1,4 @@
-﻿"""Edge TTS — Microsoft neural voices (online, good Chinese/English default)."""
+"""Edge TTS — Microsoft neural voices (online, good Chinese/English default)."""
 
 from __future__ import annotations
 

@@ -1,4 +1,4 @@
-﻿"""AgentAdapter — Input → async Agent Event Stream."""
+"""AgentAdapter — Input → async Agent Event Stream."""
 
 from __future__ import annotations
 

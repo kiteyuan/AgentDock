@@ -50,6 +50,7 @@ Optional discovery:
     "device_type": "pi"
   },
   "agent_id": "claude",
+  "workspace": "E:/Projects/AgentDock/workspace",
   "stream": true
 }
 ```
@@ -62,6 +63,7 @@ Optional discovery:
 | `context` | no | Prior turns Runtime holds |
 | `device` | no | Device metadata (never secrets) |
 | `agent_id` | no | Logical id Runtime selected |
+| `workspace` | no | Absolute shared working directory for tools/files (from Runtime `workspace.root`) |
 | `stream` | no | Prefer streaming response (`true` by default from Runtime) |
 
 Do **not** put API keys in `device` or `context`. Auth is only via HTTP headers.

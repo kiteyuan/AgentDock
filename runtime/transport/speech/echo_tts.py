@@ -1,4 +1,4 @@
-﻿"""Silent / stub TTS for pipeline testing."""
+"""Silent / stub TTS for pipeline testing."""
 
 from __future__ import annotations
 

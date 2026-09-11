@@ -1,4 +1,4 @@
-"""Shared Device Protocol helpers (Pi / desktop / any Python device)."""
+"""Shared Device Protocol helpers (rpi / cli / any Python device)."""
 
 from __future__ import annotations
 
@@ -66,6 +66,10 @@ def session_cancel(session_id: str) -> str:
 
 def tts_list() -> str:
     return make_msg("tts.list")
+
+
+def pets_list() -> str:
+    return make_msg("pets.list")
 
 
 def tts_select(session_id: str, tts_id: str, model: str | None = None) -> str:

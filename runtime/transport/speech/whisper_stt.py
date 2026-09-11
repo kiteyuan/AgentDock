@@ -1,4 +1,4 @@
-﻿"""Whisper STT — optional transport."""
+"""Whisper STT — optional transport."""
 
 from __future__ import annotations
 

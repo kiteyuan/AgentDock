@@ -1,4 +1,4 @@
-﻿"""Session Manager."""
+"""Session Manager."""
 
 from __future__ import annotations
 

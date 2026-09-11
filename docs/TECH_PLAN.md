@@ -307,6 +307,7 @@ Device --text--> AgentDock --events--> Mock Agent --events--> Device
 - 双通道输入：`user.message`（文本）+ `audio.*`（语音）
 - STT 默认开启（Whisper）；TTS 默认开启（Edge，可换 HTTP / 自选音色）
 - TTS Registry + `tts.list` / `tts.select`
+- Pet packs HTTP (`pets/`) + `pets.list`（客户端下载并本地缓存）
 - 跨网：`network.advertise_url`、Device Token、client 重连与 `device.ping/pong`
 - Client：`--text` / `--record` / `--wav` + 回传播放
 - 部署说明：`docs/DEPLOY_TAILSCALE.md`

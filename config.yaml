@@ -1,16 +1,20 @@
 server:
   host: "0.0.0.0"
   port: 8765
-  # LAN phone mic needs HTTPS page + wss. Default off so local http:// still works.
-  # Enable + restart Runtime/UI when ready:
-  #   tls: { enabled: true, cert: "certs/cert.pem", key: "certs/key.pem" }
-  tls:
-    enabled: false
-    cert: "certs/cert.pem"
-    key: "certs/key.pem"
+  assets_port: 8766     # HTTP pet packs (GET /pets/...)
 
 network:
   advertise_url: null   # e.g. "ws://100.x.y.z:8765"
+  assets_url: null      # optional override, e.g. "http://100.x.y.z:8766/pets"
+
+# Host-side pet packs — clients download + cache after pets.list
+pets:
+  root: "pets"
+
+# Shared Agent working directory (absolute, or relative to repo root).
+# Runtime sends this as AgentRequest.workspace to every agent turn.
+workspace:
+  root: "workspace"
 
 # Speech recognition — ON by default
 stt:
@@ -72,6 +76,22 @@ agent:
       cancel_url: "http://127.0.0.1:9001/v1/agent/cancel"
       capabilities: ["coding", "bash", "filesystem"]
       timeout: 180
+    codex:
+      type: "http"
+      name: "OpenAI Codex"
+      url: "http://127.0.0.1:9002/v1/agent/run"
+      mode: "stream"
+      cancel_url: "http://127.0.0.1:9002/v1/agent/cancel"
+      capabilities: ["coding", "bash", "filesystem"]
+      timeout: 300
+    claude:
+      type: "http"
+      name: "Claude Code"
+      url: "http://127.0.0.1:9003/v1/agent/run"
+      mode: "stream"
+      cancel_url: "http://127.0.0.1:9003/v1/agent/cancel"
+      capabilities: ["coding", "bash", "filesystem"]
+      timeout: 300
     # Public Agent Protocol — local demo:
     #   python agents/demo/server.py
     #   python agents/check_link.py --url http://127.0.0.1:8080/v1/agent/run

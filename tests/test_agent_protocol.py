@@ -1,4 +1,4 @@
-﻿"""Unit tests for public Agent Protocol codec + HTTP parsing helpers."""
+"""Unit tests for public Agent Protocol codec + HTTP parsing helpers."""
 
 from __future__ import annotations
 
@@ -19,13 +19,26 @@ def test_protocol_version() -> None:
 
 
 def test_request_body_shape() -> None:
-    req = AgentRequest(session_id="s1", text="hi", context=[], device={"device_id": "d1"})
+    req = AgentRequest(
+        session_id="s1",
+        text="hi",
+        context=[],
+        device={"device_id": "d1"},
+        workspace=r"E:\Projects\AgentDock\workspace",
+    )
     body = request_to_http_body(req, stream=True)
     assert body["protocol"] == PROTOCOL_VERSION
     assert body["session_id"] == "s1"
     assert body["text"] == "hi"
     assert body["stream"] is True
     assert body["device"]["device_id"] == "d1"
+    assert body["workspace"] == r"E:\Projects\AgentDock\workspace"
+
+
+def test_request_body_omits_empty_workspace() -> None:
+    req = AgentRequest(session_id="s1", text="hi")
+    body = request_to_http_body(req)
+    assert "workspace" not in body
 
 
 def test_parse_canonical_message_speak() -> None:

@@ -7,9 +7,12 @@
 ```text
 agents/
   demo/           # 内置参考 Agent（协议合规，用于测链路）
-  pi/             # Pi Coding Agent + HTTP 网关
+  pi-coding/      # Pi Coding Agent + HTTP 网关（agent id: `pi`）
+  codex/          # OpenAI Codex CLI + HTTP 网关（agent id: `codex`）
+  claude-code/    # Claude Code CLI + HTTP 网关（agent id: `claude`）
+  common/         # 网关共用辅助
   check_link.py   # 探测某个 Agent URL 是否可连、能否吐事件
-  <your-agent>/   # 后续把 Claude / Codex / Hermes 网关装在这里
+  <your-agent>/   # 后续其它网关
 ```
 
 ## 1. 用 demo 测通 Runtime ↔ Agent
@@ -24,8 +27,8 @@ python agents/check_link.py --url http://127.0.0.1:8080/v1/agent/run --text "你
 
 # 终端 C：完整链路
 # config.yaml → agent.default: http
-python -m runtime.main
-python clients/desktop/main.py --text "你好" --agent http
+python -m runtime
+python clients/cli/main.py --text "你好" --agent http
 ```
 
 ## 2. 安装自己的 Agent
@@ -33,12 +36,12 @@ python clients/desktop/main.py --text "你好" --agent http
 推荐每个 Agent 一个子目录，自带 README 与启动方式：
 
 ```text
-agents/pi/
-  README.md          # 端口、依赖、如何启动
-  # 或 clone / submodule / 启动脚本
+agents/pi-coding/     # 已有
+agents/codex/
+agents/claude-code/
 ```
 
-在根目录 `config.yaml` 注册：
+在根目录 `config.yaml` 注册（仓库已预置 `pi` / `codex` / `claude`）：
 
 ```yaml
 agent:
@@ -46,18 +49,26 @@ agent:
   agents:
     pi:
       type: http
-      name: Pi Agent
-      url: "http://127.0.0.1:9000/v1/agent/run"
-      mode: stream
-      # auth_token: "${PI_AGENT_TOKEN}"
+      url: "http://127.0.0.1:9001/v1/agent/run"
+    codex:
+      type: http
+      url: "http://127.0.0.1:9002/v1/agent/run"
+    claude:
+      type: http
+      url: "http://127.0.0.1:9003/v1/agent/run"
 ```
 
 再：
 
 ```bash
-python agents/check_link.py --url http://127.0.0.1:9000/v1/agent/run
-python -m runtime.main
-python clients/desktop/main.py --text "测试" --agent pi
+# 任选一个网关
+python agents/pi-coding/gateway.py          # :9001
+python agents/codex/gateway.py              # :9002
+python agents/claude-code/gateway.py        # :9003
+
+python agents/check_link.py --url http://127.0.0.1:9002/v1/agent/run
+python -m runtime
+python clients/cli/main.py --text "测试" --agent codex
 ```
 
 ## 3. 要求

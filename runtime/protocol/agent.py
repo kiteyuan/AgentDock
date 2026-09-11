@@ -66,6 +66,8 @@ class AgentRequest(BaseModel):
     context: list[dict[str, Any]] = Field(default_factory=list)
     device: dict[str, Any] = Field(default_factory=dict)
     agent_id: str | None = None
+    # Absolute workspace path for tools/files (shared across agents)
+    workspace: str | None = None
     cancel_event: Any = None
 
     model_config = {"arbitrary_types_allowed": True}

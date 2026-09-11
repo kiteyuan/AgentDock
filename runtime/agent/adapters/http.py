@@ -1,4 +1,4 @@
-﻿"""HTTP Agent — public Agent Protocol (agentdock.agent/1.0) client."""
+"""HTTP Agent — public Agent Protocol (agentdock.agent/1.0) client."""
 
 from __future__ import annotations
 

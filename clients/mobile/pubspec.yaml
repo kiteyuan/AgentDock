@@ -25,5 +25,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
   assets:
-    - assets/sprites/monthly-salary-cat/spritesheet.webp
-    - assets/sprites/arona-v1/spritesheet.webp
+    - assets/sprites/catalog.json
+    - assets/sprites/monthly-salary-cat/
+    - assets/sprites/arona-v1/

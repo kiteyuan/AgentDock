@@ -22,6 +22,7 @@ class DeviceMessageType(str, Enum):
     AGENTS_LIST = "agents.list"
     TTS_LIST = "tts.list"
     TTS_SELECT = "tts.select"
+    PETS_LIST = "pets.list"
     PING = "device.ping"
 
     # Runtime -> Device
@@ -29,6 +30,7 @@ class DeviceMessageType(str, Enum):
     AGENTS_LIST_RESULT = "agents.list.result"
     TTS_LIST_RESULT = "tts.list.result"
     TTS_SELECTED = "tts.selected"
+    PETS_LIST_RESULT = "pets.list.result"
     PONG = "device.pong"
     STT_PARTIAL = "stt.partial"
     STT_FINAL = "stt.final"
@@ -86,12 +88,18 @@ def session_accept(
     *,
     advertise_url: str | None = None,
     tts_id: str | None = None,
+    assets_port: int | None = None,
+    assets_base_url: str | None = None,
 ) -> DeviceMessage:
     payload: dict[str, Any] = {"session_id": session_id, "device_id": device_id}
     if advertise_url:
         payload["advertise_url"] = advertise_url
     if tts_id:
         payload["tts_id"] = tts_id
+    if assets_port is not None:
+        payload["assets_port"] = int(assets_port)
+    if assets_base_url:
+        payload["assets_base_url"] = assets_base_url
     return DeviceMessage(type=DeviceMessageType.SESSION_ACCEPT, payload=payload)
 
 
@@ -111,6 +119,21 @@ def tts_selected(session_id: str, tts_id: str, model: str | None = None) -> Devi
     if model:
         payload["model"] = model
     return DeviceMessage(type=DeviceMessageType.TTS_SELECTED, payload=payload)
+
+
+def pets_list_result(
+    pets: list[dict[str, Any]],
+    *,
+    default_id: str | None = None,
+    base_url: str | None = None,
+    assets_port: int | None = None,
+) -> DeviceMessage:
+    payload: dict[str, Any] = {"pets": pets, "default": default_id}
+    if base_url:
+        payload["base_url"] = base_url
+    if assets_port is not None:
+        payload["assets_port"] = int(assets_port)
+    return DeviceMessage(type=DeviceMessageType.PETS_LIST_RESULT, payload=payload)
 
 
 def pong(ping_id: str | None = None) -> DeviceMessage:

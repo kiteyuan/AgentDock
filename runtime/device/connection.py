@@ -1,4 +1,4 @@
-﻿"""Per-connection device state."""
+"""Per-connection device state."""
 
 from __future__ import annotations
 

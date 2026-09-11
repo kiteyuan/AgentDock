@@ -1,4 +1,4 @@
-﻿"""Runtime facade — wires Session, Registry, Router, TTS, Pipeline, Gateway."""
+"""Runtime facade — wires Session, Registry, Router, TTS, Pipeline, Gateway."""
 
 from __future__ import annotations
 
@@ -12,12 +12,15 @@ from runtime.agent.registry import AgentRegistry
 from runtime.agent.router import AgentRouter
 from runtime.bridge.pipeline import BridgePipeline
 from runtime.device.gateway import DeviceGateway
+from runtime.pets import pets_root as resolve_pets_root
+from runtime.pets.http_server import build_assets_base_url, start_pets_http_server
 from runtime.security.auth import DeviceAuth
 from runtime.security.permissions import PermissionGuard
 from runtime.session.manager import SessionManager
 from runtime.transport.speech.base import STTProvider
 from runtime.transport.speech.factory import create_tts
 from runtime.transport.speech.registry import TTSRegistry
+from runtime.workspace import resolve_workspace
 
 
 class Runtime:
@@ -35,27 +38,23 @@ class Runtime:
             self.registry, default_agent_id=default_id, permissions=self.permissions
         )
         self.stt = self._build_stt(cfg.get("stt", {}))
-        self.pipeline = BridgePipeline(self.router, tts_registry=self.tts_registry)
+        self.workspace = resolve_workspace(cfg, ensure=True)
+        self.pipeline = BridgePipeline(
+            self.router,
+            tts_registry=self.tts_registry,
+            workspace=str(self.workspace),
+        )
         server = cfg.get("server", {})
         network = cfg.get("network", {})
-        tls = server.get("tls") or {}
-        ssl_cert = ssl_key = None
-        if bool(tls.get("enabled")):
-            from pathlib import Path
-
-            root = Path(__file__).resolve().parents[1]
-            cert = tls.get("cert") or "certs/cert.pem"
-            key = tls.get("key") or "certs/key.pem"
-            ssl_cert = Path(cert) if Path(cert).is_absolute() else root / cert
-            ssl_key = Path(key) if Path(key).is_absolute() else root / key
-            if not ssl_cert.is_file() or not ssl_key.is_file():
-                # Auto-generate local CA + server cert for LAN HTTPS/WSS
-                import sys
-
-                sys.path.insert(0, str(root))
-                from certs.ensure import ensure_certs
-
-                _, ssl_cert, ssl_key = ensure_certs(root / "certs")
+        self.pets_root = resolve_pets_root(cfg)
+        self.assets_port = int(server.get("assets_port", 8766))
+        self.assets_base_url = build_assets_base_url(
+            host_hint=server.get("host", "0.0.0.0"),
+            port=self.assets_port,
+            advertise_url=network.get("advertise_url"),
+            assets_url=network.get("assets_url"),
+        )
+        self._pets_httpd = None
         self.gateway = DeviceGateway(
             host=server.get("host", "0.0.0.0"),
             port=server.get("port", 8765),
@@ -66,8 +65,9 @@ class Runtime:
             tts_registry=self.tts_registry,
             stt=self.stt,
             advertise_url=network.get("advertise_url"),
-            ssl_cert=ssl_cert,
-            ssl_key=ssl_key,
+            pets_root=self.pets_root,
+            assets_port=self.assets_port,
+            assets_base_url=self.assets_base_url,
         )
 
     async def start(self) -> None:
@@ -76,12 +76,25 @@ class Runtime:
                 await asyncio.to_thread(self.stt.warm)
             except Exception:
                 logger.exception("STT warm-up failed; will load on first audio")
+        try:
+            self._pets_httpd = start_pets_http_server(
+                host=self.cfg.get("server", {}).get("host", "0.0.0.0"),
+                port=self.assets_port,
+                pets_root=self.pets_root,
+            )
+        except OSError:
+            logger.exception(
+                "Pet assets HTTP failed to bind :{} — clients will not download pets",
+                self.assets_port,
+            )
         logger.info(
-            "AgentDock Runtime ready | agents={} | tts={} | default_agent={} | default_tts={}",
+            "AgentDock Runtime ready | agents={} | tts={} | default_agent={} | default_tts={} | workspace={} | pets={}",
             self.registry.ids(),
             self.tts_registry.ids(),
             self.router.default_agent_id,
             self.tts_registry.default_id,
+            self.workspace,
+            self.pets_root,
         )
         await self.gateway.start()
 

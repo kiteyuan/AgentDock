@@ -1,4 +1,4 @@
-﻿"""Wire helpers — JSON encode/decode for Device Protocol frames."""
+"""Wire helpers — JSON encode/decode for Device Protocol frames."""
 
 from __future__ import annotations
 

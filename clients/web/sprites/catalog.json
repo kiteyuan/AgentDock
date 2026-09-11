@@ -1,0 +1,17 @@
+{
+  "default": "monthly-salary-cat",
+  "pets": [
+    {
+      "id": "monthly-salary-cat",
+      "label": "Monthly salary cat",
+      "sheet": "monthly-salary-cat/spritesheet.webp",
+      "url": "https://codex-pets.net/#/pets/monthly-salary-cat"
+    },
+    {
+      "id": "arona-v1",
+      "label": "Arona",
+      "sheet": "arona-v1/spritesheet.webp",
+      "url": "https://codex-pets.net/#/pets/arona-v1"
+    }
+  ]
+}

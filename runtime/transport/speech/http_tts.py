@@ -1,4 +1,4 @@
-﻿"""HTTP TTS — call any HTTP endpoint that returns audio bytes or JSON{audio_base64}."""
+"""HTTP TTS — call any HTTP endpoint that returns audio bytes or JSON{audio_base64}."""
 
 from __future__ import annotations
 

@@ -71,6 +71,10 @@ String audioEnd(String sessionId) =>
 String sessionCancel(String sessionId) =>
     encode('session.cancel', {'session_id': sessionId});
 
+String ttsList() => encode('tts.list');
+
+String petsList() => encode('pets.list');
+
 String ttsSelect(String sessionId, String ttsId, {String? model}) {
   final payload = <String, dynamic>{
     'session_id': sessionId,

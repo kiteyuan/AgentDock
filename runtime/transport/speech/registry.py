@@ -1,4 +1,4 @@
-﻿"""TTS registry — discover and select TTS providers."""
+"""TTS registry — discover and select TTS providers."""
 
 from __future__ import annotations
 

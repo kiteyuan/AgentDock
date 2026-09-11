@@ -268,27 +268,56 @@ function msg(type, payload = {}) {
 }
 
 function defaultWsUrl() {
-  const host = location.hostname || "127.0.0.1";
-  if (location.protocol === "https:") {
-    return `wss://${host}:8765`;
-  }
   return "ws://127.0.0.1:8765";
+}
+
+function fillTtsSelect(providers, defaultId) {
+  const sel = $("ttsId");
+  const prev = (sel.value || localStorage.getItem(PREFS.tts) || "").trim();
+  const list = Array.isArray(providers) ? providers : [];
+  sel.innerHTML = "";
+  if (!list.length) {
+    const opt = document.createElement("option");
+    opt.value = prev || "haibara";
+    opt.textContent = opt.value;
+    sel.appendChild(opt);
+    return;
+  }
+  let pick = null;
+  for (const p of list) {
+    const id = p.id || p.name;
+    if (!id) continue;
+    const opt = document.createElement("option");
+    opt.value = id;
+    opt.textContent = p.name ? `${p.name} (${id})` : id;
+    sel.appendChild(opt);
+    if (id === prev) pick = id;
+  }
+  if (!pick) {
+    pick = (defaultId && [...sel.options].some((o) => o.value === defaultId))
+      ? defaultId
+      : sel.options[0]?.value;
+  }
+  if (pick) sel.value = pick;
 }
 
 function loadPrefs() {
   const saved = localStorage.getItem(PREFS.url) || "";
   let url = saved || defaultWsUrl();
-  // HTTPS page cannot use ws:// — upgrade; HTTP page should not stick on broken wss://
-  if (location.protocol === "https:") {
-    if (!saved || saved.includes("127.0.0.1") || saved.includes("localhost") || saved.startsWith("ws://")) {
-      url = defaultWsUrl();
-    }
-  } else if (saved.startsWith("wss://")) {
+  // Desktop preview is HTTP — don't stick on leftover wss:// from old LAN setups
+  if (saved.startsWith("wss://")) {
     url = defaultWsUrl();
   }
   $("url").value = url;
   $("token").value = localStorage.getItem(PREFS.token) || "";
-  $("ttsId").value = localStorage.getItem(PREFS.tts) || "haibara";
+  const tts = localStorage.getItem(PREFS.tts) || "haibara";
+  if (![...$("ttsId").options].some((o) => o.value === tts)) {
+    const opt = document.createElement("option");
+    opt.value = tts;
+    opt.textContent = tts;
+    $("ttsId").appendChild(opt);
+  }
+  $("ttsId").value = tts;
   $("petId").value = localStorage.getItem(PREFS.pet) || "monthly-salary-cat";
 }
 
@@ -398,9 +427,32 @@ function connect() {
       sessionId = p.session_id;
       enterIdle();
       // Keep last reply across reconnect / refresh
+      ws.send(msg("tts.list"));
+      ws.send(msg("pets.list"));
       const tts = $("ttsId").value.trim();
       if (tts) {
         ws.send(msg("tts.select", { session_id: sessionId, tts_id: tts }));
+      }
+      return;
+    }
+    if (m.type === "tts.list.result") {
+      fillTtsSelect(p.providers || [], p.default);
+      savePrefs();
+      return;
+    }
+    if (m.type === "pets.list.result") {
+      const applied = window.PixelBot.applyRemoteCatalog(p, $("url").value.trim());
+      if (applied) {
+        const cur = window.PixelBot.refreshPetSelect(
+          $("petId"),
+          localStorage.getItem(PREFS.pet) || $("petId").value
+        );
+        $("petId").value = cur;
+        if (window.pixelBot) {
+          window.pixelBot.setPet(cur);
+          window.pixelBot.reload();
+        }
+        savePrefs();
       }
       return;
     }
@@ -457,7 +509,7 @@ async function startTalk() {
     pcmChunks = [];
     if (!window.isSecureContext && !/^(localhost|127\.0\.0\.1)$/i.test(location.hostname)) {
       throw new Error(
-        "当前是 http://IP 访问，浏览器禁止麦克风。请在本机用 http://127.0.0.1:8090，或给站点配 HTTPS / 用本机打开。"
+        "Web UI 仅支持本机预览（http://127.0.0.1）。手机请用 Flutter 客户端。"
       );
     }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
@@ -676,25 +728,29 @@ $("btnSave").onclick = (e) => {
 };
 
 loadPrefs();
-window.pixelBot = window.PixelBot.createPixelBot($("sprite"), $("petId").value);
-window.pixelBot.start();
-setMood("offline");
-restoreLastReply();
-turnLocked = true;
-syncBotEnabled();
 
-if (
-  location.protocol === "https:" ||
-  ($("url").value || "").includes("127.0.0.1") ||
-  ($("url").value || "").includes("localhost")
-) {
-  connect();
-} else {
-  $("settings").showModal();
-}
+(async () => {
+  const savedPet = localStorage.getItem(PREFS.pet) || "";
+  const petId = await window.PixelBot.fillPetSelect($("petId"), savedPet);
+  $("petId").value = petId;
+  window.pixelBot = window.PixelBot.createPixelBot($("sprite"), petId);
+  await window.pixelBot.ready;
+  window.pixelBot.start();
+  setMood("offline");
+  restoreLastReply();
+  turnLocked = true;
+  syncBotEnabled();
 
-if (location.protocol === "https:" && !window.isSecureContext) {
-  showLiveReply("HTTPS 未生效为安全上下文，请检查证书。可下载 /ca.pem 安装到系统信任。");
-} else if (location.protocol === "http:" && location.hostname !== "127.0.0.1" && location.hostname !== "localhost") {
-  showLiveReply("当前是 HTTP 局域网访问，麦克风不可用。请改用 https://本机IP:8090，并先安装 /ca.pem");
-}
+  if (
+    ($("url").value || "").includes("127.0.0.1") ||
+    ($("url").value || "").includes("localhost")
+  ) {
+    connect();
+  } else {
+    $("settings").showModal();
+  }
+
+  if (location.protocol === "http:" && location.hostname !== "127.0.0.1" && location.hostname !== "localhost") {
+    showLiveReply("Web UI 仅作桌面预览。手机请用 Flutter 客户端（clients/mobile）。");
+  }
+})();

@@ -1,4 +1,4 @@
-﻿"""Agent Registry — discovery of available adapters."""
+"""Agent Registry — discovery of available adapters."""
 
 from __future__ import annotations
 

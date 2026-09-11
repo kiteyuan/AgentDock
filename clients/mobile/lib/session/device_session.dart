@@ -7,6 +7,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../audio/player.dart';
 import '../audio/recorder.dart';
 import '../protocol/messages.dart' as proto;
+import '../ui/pet_catalog.dart';
 import 'client_state.dart';
 
 class DeviceSession {
@@ -36,6 +37,11 @@ class DeviceSession {
   String token = '';
   String ttsId = 'haibara';
   String petId = 'monthly-salary-cat';
+  /// From Runtime `tts.list.result` — empty until connected.
+  List<Map<String, dynamic>> ttsProviders = const [];
+  String? ttsDefaultId;
+  /// Bumps when pets catalog is refreshed from Runtime.
+  int petsEpoch = 0;
 
   final List<int> _ttsBuf = [];
   String _ttsPendingText = '';
@@ -199,9 +205,31 @@ class DeviceSession {
       case 'session.accept':
         sessionId = payload['session_id'] as String?;
         _setState(ClientState.idle, status: '点按角色通话');
+        _ws?.sink.add(proto.ttsList());
+        _ws?.sink.add(proto.petsList());
         if (ttsId.isNotEmpty && sessionId != null) {
           _ws?.sink.add(proto.ttsSelect(sessionId!, ttsId));
         }
+        break;
+      case 'tts.list.result':
+        final providers = payload['providers'];
+        if (providers is List) {
+          ttsProviders = [
+            for (final p in providers)
+              if (p is Map) Map<String, dynamic>.from(p),
+          ];
+        } else {
+          ttsProviders = const [];
+        }
+        ttsDefaultId = payload['default'] as String?;
+        if (ttsId.isEmpty && (ttsDefaultId ?? '').isNotEmpty) {
+          ttsId = ttsDefaultId!;
+        }
+        _notify();
+        break;
+      case 'pets.list.result':
+        // Catalog apply is async — HomePage listens via petsEpoch.
+        _applyPets(payload);
         break;
       case 'error':
         lastError = '${payload['detail'] ?? payload['message'] ?? 'error'}';
@@ -275,6 +303,13 @@ class DeviceSession {
         _setState(ClientState.idle, status: '点按角色通话');
       }
     }
+  }
+
+  Future<void> _applyPets(Map<String, dynamic> payload) async {
+    await PetCatalog.applyRemoteCatalog(payload, wsUrl: url);
+    petId = PetCatalog.resolveId(petId);
+    petsEpoch++;
+    _notify();
   }
 
   Future<void> dispose() async {
