@@ -20,7 +20,21 @@ python agents/pi/gateway.py
 # PI_GATEWAY_PORT=9001 python agents/pi/gateway.py
 ```
 
-可选环境变量：`PI_PROVIDER`、`PI_MODEL`、`PI_NO_TOOLS=1`、`PI_GATEWAY_PORT`。
+可选环境变量：`PI_PROVIDER`、`PI_MODEL`、`PI_NO_TOOLS=1`、`PI_GATEWAY_PORT`、`PI_CWD`。
+
+### 会话记忆
+
+默认按请求里的 **`device.id`（设备）** 复用 Pi session，WS 重连换 `session_id` 也不断记忆。  
+文件：`agents/pi/.agentdock-sessions/dev-<device_id>.…`
+
+| 环境变量 | 作用 |
+|----------|------|
+| `PI_SESSION_KEY=device` | 按设备（默认） |
+| `PI_SESSION_KEY=session` | 按 WS `session_id`（旧行为） |
+| `PI_NO_SESSION=1` | 每轮全新、不落盘 |
+| `PI_SESSION_DIR=...` | 改存储目录 |
+
+客户端需使用**稳定且尽量唯一**的 `device_id`（手机 App / Web 会持久化到本地）。
 
 ## 联调
 

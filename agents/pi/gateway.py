@@ -11,6 +11,9 @@ Env:
   PI_GATEWAY_PORT=9001
   PI_CWD=E:\\path\\to\\project   # working directory for tools/files (default: agents/pi)
   PI_NO_TOOLS=1
+  PI_NO_SESSION=1               # opt out: ephemeral turns (old behavior)
+  PI_SESSION_DIR=...            # Pi session files (default: agents/pi/.agentdock-sessions)
+  PI_SESSION_KEY=device         # device (default) | session — what keys Pi --session-id
   PI_APPEND_SYSTEM_PROMPT=...   # append voice style prompt (default: agents/pi/voice_prompt.txt)
   PI_SYSTEM_PROMPT=...          # replace system prompt entirely (path or literal)
 """
@@ -35,6 +38,14 @@ WORK_DIR = Path(os.environ.get("PI_CWD") or os.environ.get("PI_WORKDIR") or HERE
 PROVIDER = os.environ.get("PI_PROVIDER")  # optional override
 MODEL = os.environ.get("PI_MODEL")
 NO_TOOLS = os.environ.get("PI_NO_TOOLS", "0") == "1"
+# Default: reuse Pi session files keyed by AgentDock session_id.
+# Set PI_NO_SESSION=1 to restore one-shot (--no-session) turns.
+NO_SESSION = os.environ.get("PI_NO_SESSION", "0") == "1"
+SESSION_DIR = Path(
+    os.environ.get("PI_SESSION_DIR") or (HERE / ".agentdock-sessions")
+).expanduser().resolve()
+# Key Pi memory by stable device id (survives WS reconnect). Use "session" for WS-scoped.
+SESSION_KEY = (os.environ.get("PI_SESSION_KEY") or "device").strip().lower()
 
 # Voice / short-reply system prompt (appended to Pi's default). Override with
 # PI_APPEND_SYSTEM_PROMPT=path|text  or PI_SYSTEM_PROMPT=... to replace entirely.
@@ -147,8 +158,36 @@ def _text_from_message(message: dict) -> str:
     return ""
 
 
-def _build_pi_cmd(prompt: str) -> list[str]:
-    cmd = [*_resolve_pi_cmd(), "--mode", "json", "--print", "--no-session"]
+def _safe_session_id(session_id: str) -> str:
+    """Filesystem-safe id for Pi --session-id (create-if-missing)."""
+    cleaned = "".join(c for c in session_id if c.isalnum() or c in "-_")
+    return cleaned[:64] or uuid.uuid4().hex[:12]
+
+
+def _pi_memory_key(*, session_id: str, device_id: str | None) -> str:
+    """Choose Pi session file key. Prefer device so reconnect keeps memory."""
+    if NO_SESSION:
+        return session_id
+    mode = SESSION_KEY
+    did = (device_id or "").strip()
+    if mode == "session" or not did:
+        return _safe_session_id(session_id)
+    # Prefix avoids colliding with short AgentDock WS session ids.
+    return _safe_session_id(f"dev-{did}")
+
+
+def _build_pi_cmd(prompt: str, *, pi_key: str) -> list[str]:
+    cmd = [*_resolve_pi_cmd(), "--mode", "json", "--print"]
+    if NO_SESSION:
+        cmd.append("--no-session")
+    else:
+        SESSION_DIR.mkdir(parents=True, exist_ok=True)
+        cmd += [
+            "--session-dir",
+            str(SESSION_DIR),
+            "--session-id",
+            pi_key,
+        ]
     if PROVIDER:
         cmd += ["--provider", PROVIDER]
     if MODEL:
@@ -160,9 +199,23 @@ def _build_pi_cmd(prompt: str) -> list[str]:
     return cmd
 
 
-def run_pi_turn(session_id: str, text: str, write_event) -> None:
-    cmd = _build_pi_cmd(text)
-    write_event(_event("agent.thinking", session_id, content=f"pi: {' '.join(cmd[:6])} …"))
+def run_pi_turn(
+    session_id: str,
+    text: str,
+    write_event,
+    *,
+    device_id: str | None = None,
+) -> None:
+    pi_key = _pi_memory_key(session_id=session_id, device_id=device_id)
+    cmd = _build_pi_cmd(text, pi_key=pi_key)
+    sid_note = "ephemeral" if NO_SESSION else pi_key
+    write_event(
+        _event(
+            "agent.thinking",
+            session_id,
+            content=f"pi[{sid_note}]: {' '.join(cmd[:6])} …",
+        )
+    )
     try:
         proc = subprocess.Popen(
             cmd,
@@ -295,7 +348,7 @@ class Handler(BaseHTTPRequestHandler):
                 "id": "pi",
                 "name": "Pi Coding Agent",
                 "capabilities": ["coding", "bash", "filesystem"],
-                "description": "Gateway over @earendil-works/pi-coding-agent (--mode json)",
+                "description": "Gateway over @earendil-works/pi-coding-agent (--mode json, Pi memory by device_id)",
             }
             raw = json.dumps(body, ensure_ascii=False).encode()
             self.send_response(200)
@@ -317,7 +370,12 @@ class Handler(BaseHTTPRequestHandler):
 
         path = self.path.rstrip("/")
         if path == "/v1/agent/cancel":
-            out = json.dumps({"ok": True, "note": "json-mode is one-shot; cancel is best-effort"}).encode()
+            out = json.dumps(
+                {
+                    "ok": True,
+                    "note": "print-mode cancel is best-effort; Pi session file is kept for reuse",
+                }
+            ).encode()
             self.send_response(200)
             self.send_header("Content-Type", "application/json")
             self.send_header("Content-Length", str(len(out)))
@@ -331,6 +389,8 @@ class Handler(BaseHTTPRequestHandler):
 
         sid = str(req.get("session_id") or uuid.uuid4().hex[:12])
         text = str(req.get("text") or "")
+        device = req.get("device") if isinstance(req.get("device"), dict) else {}
+        device_id = str(device.get("id") or device.get("device_id") or "").strip() or None
 
         self.send_response(200)
         self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
@@ -344,7 +404,7 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
         try:
-            run_pi_turn(sid, text, write_event)
+            run_pi_turn(sid, text, write_event, device_id=device_id)
         except Exception as exc:  # noqa: BLE001
             write_event(_event("agent.error", sid, content=str(exc)))
 
@@ -373,6 +433,13 @@ def main() -> None:
     print(f"Pi Agent gateway on http://{HOST}:{PORT}", flush=True)
     print(f"  cwd={WORK_DIR}", flush=True)
     print(f"  pi cmd: {prefix}", flush=True)
+    if NO_SESSION:
+        print("  sessions: ephemeral (--no-session)", flush=True)
+    else:
+        print(
+            f"  sessions: key={SESSION_KEY} under {SESSION_DIR}",
+            flush=True,
+        )
     sp = _system_prompt_args()
     if sp:
         kind = "replace" if sp[0] == "--system-prompt" else "append"

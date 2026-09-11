@@ -12,6 +12,7 @@ build/
 .pytest_cache/
 node_modules/
 agents/pi/package-lock.json
+agents/pi/.agentdock-sessions/
 
 # Local overrides (put real tokens / LAN URLs here)
 config.local.yaml

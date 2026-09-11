@@ -280,7 +280,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final locked = !s.canToggleTalk;
     final reply = s.replyText.trim().isEmpty ? '' : s.replyText;
 
     return Scaffold(
@@ -319,7 +318,6 @@ class _HomePageState extends State<HomePage> {
                           child: PixelBot(
                             mood: s.state,
                             petId: s.petId,
-                            locked: locked,
                           ),
                         ),
                       ),

@@ -32,7 +32,16 @@ let audioEl = null;
 let streamTimer = null;
 let streamToken = 0;
 
-const PREFS = { url: "ad_url", token: "ad_token", tts: "ad_tts", pet: "ad_pet", reply: "ad_last_reply" };
+const PREFS = { url: "ad_url", token: "ad_token", tts: "ad_tts", pet: "ad_pet", reply: "ad_last_reply", device: "ad_device_id" };
+
+function stableDeviceId() {
+  let id = localStorage.getItem(PREFS.device) || "";
+  if (!id) {
+    id = "web-" + Math.random().toString(16).slice(2) + Date.now().toString(16).slice(-4);
+    localStorage.setItem(PREFS.device, id);
+  }
+  return id;
+}
 
 function setMood(mood) {
   $("stage").dataset.mood = mood;
@@ -367,7 +376,7 @@ function connect() {
 
   ws.onopen = () => {
     const payload = {
-      device_id: "web-001",
+      device_id: stableDeviceId(),
       device_type: "web",
       protocol_version: "1.0",
     };

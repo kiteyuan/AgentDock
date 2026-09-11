@@ -1,16 +1,31 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import 'session/device_session.dart';
 import 'ui/home_page.dart';
 import 'ui/theme.dart';
 
-void main() {
+Future<String> _stableDeviceId() async {
+  final p = await SharedPreferences.getInstance();
+  const key = 'device_id';
+  final existing = p.getString(key);
+  if (existing != null && existing.isNotEmpty) return existing;
+  final id = 'mobile-${const Uuid().v4().replaceAll('-', '').substring(0, 12)}';
+  await p.setString(key, id);
+  return id;
+}
+
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  runApp(const AgentDockApp());
+  final deviceId = await _stableDeviceId();
+  runApp(AgentDockApp(deviceId: deviceId));
 }
 
 class AgentDockApp extends StatefulWidget {
-  const AgentDockApp({super.key});
+  const AgentDockApp({super.key, required this.deviceId});
+
+  final String deviceId;
 
   @override
   State<AgentDockApp> createState() => _AgentDockAppState();
@@ -22,7 +37,7 @@ class _AgentDockAppState extends State<AgentDockApp> {
   @override
   void initState() {
     super.initState();
-    _session = DeviceSession(deviceId: 'mobile-flutter-001');
+    _session = DeviceSession(deviceId: widget.deviceId);
   }
 
   @override

@@ -12,12 +12,10 @@ class PixelBot extends StatefulWidget {
     super.key,
     required this.mood,
     required this.petId,
-    this.locked = false,
   });
 
   final ClientState mood;
   final String petId;
-  final bool locked;
 
   static const cellW = 192.0;
   static const cellH = 208.0;
@@ -140,25 +138,11 @@ class _PixelBotState extends State<PixelBot> {
       );
     }
 
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 180),
-      opacity: widget.locked ? 0.9 : 1,
-      child: ColorFiltered(
-        colorFilter: widget.locked
-            ? const ColorFilter.matrix(<double>[
-                0.55, 0.35, 0.1, 0, 0,
-                0.55, 0.35, 0.1, 0, 0,
-                0.55, 0.35, 0.1, 0, 0,
-                0, 0, 0, 0.92, 0,
-              ])
-            : const ColorFilter.mode(Colors.transparent, BlendMode.dst),
-        child: AspectRatio(
-          aspectRatio: PixelBot.cellW / PixelBot.cellH,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            child: sprite,
-          ),
-        ),
+    return AspectRatio(
+      aspectRatio: PixelBot.cellW / PixelBot.cellH,
+      child: FittedBox(
+        fit: BoxFit.contain,
+        child: sprite,
       ),
     );
   }

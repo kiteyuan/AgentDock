@@ -25,7 +25,7 @@ _HEADING_RE = re.compile(r"^#{1,6}\s*", re.MULTILINE)
 _BULLET_RE = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
 _NUMBERED_RE = re.compile(r"^\s*\d+[.)、]\s+", re.MULTILINE)
 _MULTI_NL_RE = re.compile(r"\n{2,}")
-_STRIP_CHARS_RE = re.compile(r"[#*_~>`|\\/{}\[\]<>]")
+_STRIP_CHARS_RE = re.compile(r"[#*_~>`|{}\[\]<>]")
 _SPACES_RE = re.compile(r"[ \t]{2,}")
 # Sentence ends for streaming TTS
 _SENT_SPLIT_RE = re.compile(r"(?<=[。！？!?；;\n])")
@@ -63,6 +63,8 @@ def speak_text(text: str) -> str:
     s = re.sub(r"\(\s*\)", "", s)
     s = _MULTI_NL_RE.sub("。", s)
     s = s.replace("\n", "。")
+    # Keep Windows paths readable for TTS (do not drop backslashes).
+    s = s.replace("\\", "/")
     s = _STRIP_CHARS_RE.sub("", s)
     # Normalize odd punctuation clusters
     s = re.sub(r"[。！？]{2,}", "。", s)
