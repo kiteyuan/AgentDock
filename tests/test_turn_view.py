@@ -13,8 +13,8 @@ def test_thinking_throttled() -> None:
     # Within interval: no print yet
     assert lines == []
     view.handle("agent.message", {"content": "你好"})
-    assert any(x.startswith("助手：") for x in lines)
-    assert any(x.startswith("思考：") for x in lines)
+    assert "你好" in lines
+    assert any("Hello" in x for x in lines)
 
 
 def test_stt_and_tools() -> None:
@@ -22,7 +22,7 @@ def test_stt_and_tools() -> None:
     view = TurnView(print=lines.append, thinking_min_interval=0)
     view.handle("stt.final", {"text": "开灯"})
     view.handle("agent.tool_call", {"tool": "home.light"})
-    view.handle("agent.tool_result", {"tool": "home.light", "status": "success"})
-    assert lines[0].startswith("你：")
-    assert "工具：home.light" in lines[1]
-    assert "结果：" in lines[2]
+    view.handle("agent.tool_result", {"tool": "home.light", "status": "success", "content": "ok"})
+    assert "开灯" not in lines  # STT is not a process line
+    assert lines[0] == "home.light"
+    assert lines[1] == "ok"

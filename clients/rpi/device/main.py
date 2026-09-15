@@ -43,9 +43,10 @@ async def main_async(config_path: str | None = None) -> None:
         display=display,
         sample_rate=int(audio.get("sample_rate", 16000)),
         record_seconds=float(audio.get("record_seconds", 5)),
-        heartbeat_seconds=float(cfg.get("heartbeat_seconds", 15)),
+        heartbeat_seconds=float(cfg.get("heartbeat_seconds", 0)),
         reconnect_retries=int(reconnect.get("retries", 20)),
         reconnect_delay=float(reconnect.get("base_delay", 1.0)),
+        ws_ping_interval=float(cfg.get("ws_ping_interval", 30) or 0) or None,
     )
     trigger = build_trigger(cfg.get("button") or {})
 

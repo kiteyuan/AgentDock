@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import io
+import tempfile
 import wave
 from pathlib import Path
 
@@ -30,7 +31,7 @@ def record_until_stop(
     """Record until stop_event is set (or max_seconds). Same click-toggle UX as Web."""
     import sounddevice as sd
 
-    chunks: list[bytes] = []
+    buf = bytearray()
     max_frames = int(max_seconds * sample_rate)
     got = 0
     logger.info("Recording until stop @ {}Hz (max {}s)", sample_rate, max_seconds)
@@ -39,8 +40,7 @@ def record_until_stop(
         nonlocal got
         if stop_event.is_set() or got >= max_frames:
             raise sd.CallbackStop
-        raw = indata[:frames].tobytes()
-        chunks.append(raw)
+        buf.extend(indata[:frames].tobytes())
         got += frames
 
     with sd.InputStream(
@@ -53,7 +53,7 @@ def record_until_stop(
         while not stop_event.is_set() and got < max_frames:
             stop_event.wait(0.05)
 
-    return _frames_to_wav(b"".join(chunks), sample_rate)
+    return _frames_to_wav(bytes(buf), sample_rate)
 
 
 def _frames_to_wav(pcm: bytes, sample_rate: int) -> bytes:
@@ -64,6 +64,31 @@ def _frames_to_wav(pcm: bytes, sample_rate: int) -> bytes:
         wf.setframerate(sample_rate)
         wf.writeframes(pcm)
     return buf.getvalue()
+
+
+def play_bytes(data: bytes) -> None:
+    """Play audio from memory. WAV/PCM via sounddevice; MP3 falls back to temp file."""
+    if not data:
+        return
+    try:
+        import sounddevice as sd
+        import soundfile as sf
+
+        arr, sr = sf.read(io.BytesIO(data), dtype="float32")
+        sd.play(arr, sr)
+        sd.wait()
+        return
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("in-memory play failed: {}", exc)
+
+    ext = sniff_ext(data)
+    with tempfile.NamedTemporaryFile(suffix="." + ext, delete=False) as f:
+        f.write(data)
+        path = Path(f.name)
+    try:
+        play_file(path)
+    finally:
+        path.unlink(missing_ok=True)
 
 
 def play_file(path: Path) -> None:

@@ -11,7 +11,7 @@
 | `connecting` | 正在连 WS / 等 `session.accept` | 否 |
 | `idle` | 在线，可开下一轮 | 是 |
 | `listening` | 正在录音 | 是（再点 = 结束发送） |
-| `busy` | STT / Agent 处理中 | 否 |
+| `busy` | STT / Agent 进行中（UI 显示过程一行） | 否 |
 | `speaking` | 正在收/播 TTS | 否（取消除外） |
 | `error` | 出错；可重连或回 idle | 视实现 |
 
@@ -73,8 +73,8 @@ Python 构造：`clients/shared/protocol.py`。
 
 ## 双通道
 
-- **显示**：`thinking` / `tool_*` / 非 speak 的 `agent.message`
-- **播报**：`agent.message` 且 `speak !== false` → 进 TTS；字幕宜跟 `tts.start.text` 按句出现
+- **显示**：`thinking` / `tool_*` / `agent.message` 直接刷事件里的原生 `content`/`text`（无 `content` 的 `tool_call` 才露出原生 `tool`/`args`）。不要自造「处理中 / 你： / 思考： / 工具：」前缀
+- **播报**：`agent.message` 且 `speak !== false` → 进 TTS；字幕宜跟 `tts.start.text` 按句出现（可覆盖过程行）
 
 ## 平台职责
 

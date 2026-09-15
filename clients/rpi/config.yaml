@@ -9,8 +9,8 @@ device_type: "pi"
 runtime_url: "ws://127.0.0.1:8765"   # use Tailscale IP when remote
 token: null
 
-tts_id: "edge"
-tts_model: "zh-CN-XiaoxiaoNeural"
+tts_id: "haibara"
+tts_model: null
 agent_id: null
 
 audio:
@@ -33,7 +33,8 @@ display:
   width: 128
   height: 64
 
-heartbeat_seconds: 15
+heartbeat_seconds: 0          # 0 = WebSocket protocol ping only (lighter on Zero 2 W)
+ws_ping_interval: 30
 reconnect:
   retries: 20
   base_delay: 1.0

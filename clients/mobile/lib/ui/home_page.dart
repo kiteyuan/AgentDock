@@ -10,7 +10,7 @@ import 'pixel_bot.dart';
 import 'pet_catalog.dart';
 import 'theme.dart';
 
-/// Layout aligned with clients/web: centered pet + 3-line reply; tap talk / long-press settings.
+/// Layout aligned with clients/web: centered pet + multi-line reply; tap talk / long-press settings.
 class HomePage extends StatefulWidget {
   const HomePage({super.key, required this.session});
 
@@ -302,6 +302,8 @@ class _HomePageState extends State<HomePage> {
   @override
   Widget build(BuildContext context) {
     final reply = s.replyText.trim().isEmpty ? '' : s.replyText;
+    final screenH = MediaQuery.sizeOf(context).height;
+    final replyH = WebUiTheme.replyBoxHeightFor(screenH);
 
     return Scaffold(
       backgroundColor: WebUiTheme.bg0,
@@ -321,32 +323,35 @@ class _HomePageState extends State<HomePage> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
                 child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Listener(
-                      onPointerDown: (_) => _onBotPointerDown(),
-                      onPointerUp: (_) => _onBotPointerUp(),
-                      onPointerCancel: (_) => _onBotPointerUp(),
-                      child: GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: _onBotTap,
-                        onLongPress: _openSettings,
-                        child: ConstrainedBox(
-                          constraints: BoxConstraints(
-                            maxWidth: MediaQuery.sizeOf(context).width * 0.72,
-                            maxHeight: MediaQuery.sizeOf(context).height * 0.52,
-                          ),
-                          child: PixelBot(
-                            key: ValueKey('${s.petId}-${s.petsEpoch}'),
-                            mood: s.state,
-                            petId: s.petId,
+                    Expanded(
+                      child: Center(
+                        child: Listener(
+                          onPointerDown: (_) => _onBotPointerDown(),
+                          onPointerUp: (_) => _onBotPointerUp(),
+                          onPointerCancel: (_) => _onBotPointerUp(),
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: _onBotTap,
+                            onLongPress: _openSettings,
+                            child: ConstrainedBox(
+                              constraints: BoxConstraints(
+                                maxWidth: MediaQuery.sizeOf(context).width * 0.72,
+                                maxHeight: screenH * 0.52,
+                              ),
+                              child: PixelBot(
+                                key: ValueKey('${s.petId}-${s.petsEpoch}'),
+                                mood: s.state,
+                                petId: s.petId,
+                              ),
+                            ),
                           ),
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
                     SizedBox(
-                      height: WebUiTheme.replyBoxHeight,
+                      height: replyH,
                       width: double.infinity,
                       child: GestureDetector(
                         onTap: s.canReplay
@@ -366,12 +371,15 @@ class _HomePageState extends State<HomePage> {
                                 ),
                                 if (s.state == ClientState.speaking ||
                                     s.state == ClientState.listening ||
+                                    s.state == ClientState.busy ||
                                     (reply.isEmpty && s.state == ClientState.idle))
                                   WidgetSpan(
                                     alignment: PlaceholderAlignment.baseline,
                                     baseline: TextBaseline.alphabetic,
                                     child: _Caret(
-                                      visible: reply.isEmpty || s.state == ClientState.speaking,
+                                      visible: reply.isEmpty ||
+                                          s.state == ClientState.speaking ||
+                                          s.state == ClientState.busy,
                                     ),
                                   ),
                               ],

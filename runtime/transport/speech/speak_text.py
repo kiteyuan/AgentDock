@@ -26,6 +26,8 @@ _BULLET_RE = re.compile(r"^\s*[-*+]\s+", re.MULTILINE)
 _NUMBERED_RE = re.compile(r"^\s*\d+[.)、]\s+", re.MULTILINE)
 _MULTI_NL_RE = re.compile(r"\n{2,}")
 _STRIP_CHARS_RE = re.compile(r"[#*_~>`|{}\[\]<>]")
+# Quotation / book-title marks — keep inner text, drop the marks (TTS often voices them)
+_QUOTE_CHARS_RE = re.compile(r"[「」『』【】《》〈〉“”‘’\"']")
 _SPACES_RE = re.compile(r"[ \t]{2,}")
 # Sentence ends for streaming TTS
 _SENT_SPLIT_RE = re.compile(r"(?<=[。！？!?；;\n])")
@@ -61,6 +63,7 @@ def speak_text(text: str) -> str:
     s = re.sub(r"[\uFE0E\uFE0F\u200D]", "", s)  # emoji variation / ZWJ leftovers
     s = re.sub(r"（\s*）", "", s)
     s = re.sub(r"\(\s*\)", "", s)
+    s = _QUOTE_CHARS_RE.sub("", s)
     s = _MULTI_NL_RE.sub("。", s)
     s = s.replace("\n", "。")
     # Keep Windows paths readable for TTS (do not drop backslashes).

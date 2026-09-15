@@ -9,6 +9,8 @@ build/
 !.env.example
 *.wav
 *.mp3
+*.log
+tmp_*
 .pytest_cache/
 node_modules/
 agents/pi-coding/package-lock.json
@@ -46,3 +48,4 @@ Thumbs.db
 .idea/
 .vscode/
 *.swp
+.dart_tool/

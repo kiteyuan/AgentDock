@@ -27,6 +27,7 @@ from runtime.protocol.device import (
 from runtime.protocol.wire import decode_message, encode_message
 from runtime.security.auth import DeviceAuth
 from runtime.session.manager import SessionManager
+from runtime.session.models import Session
 from runtime.transport.speech.base import STTProvider
 from runtime.transport.speech.registry import TTSRegistry
 
@@ -90,6 +91,24 @@ class DeviceGateway:
             if conn.session:
                 conn.session.request_cancel()
                 self.sessions.remove(conn.session.session_id)
+
+    @staticmethod
+    async def _replace_turn(
+        session: Session | None,
+        turn_task: asyncio.Task | None,
+    ) -> None:
+        """Cancel in-flight turn so a new user/audio turn does not pile up."""
+        if turn_task and not turn_task.done():
+            turn_task.cancel()
+            try:
+                await turn_task
+            except asyncio.CancelledError:
+                pass
+            except Exception:  # noqa: BLE001
+                logger.exception("previous turn ended with error during cancel")
+        if session is not None:
+            session.request_cancel()
+            session.reset_cancel()
 
     async def _dispatch(
         self,
@@ -187,6 +206,8 @@ class DeviceGateway:
             if session:
                 session.request_cancel()
                 logger.info("[{}] cancel requested", sid)
+            if turn_task and not turn_task.done():
+                turn_task.cancel()
             return turn_task
 
         if msg.type == DeviceMessageType.USER_MESSAGE:
@@ -199,8 +220,9 @@ class DeviceGateway:
             if not session:
                 await conn.send(encode_message(error_msg("unknown session")))
                 return turn_task
+            await self._replace_turn(session, turn_task)
             bus = EventBus(conn.send)
-            task = asyncio.create_task(
+            return asyncio.create_task(
                 self.pipeline.run_turn(
                     session,
                     text,
@@ -210,7 +232,6 @@ class DeviceGateway:
                     tts_model=tts_model,
                 )
             )
-            return task
 
         if msg.type == DeviceMessageType.AUDIO_START:
             conn.audio_buf.clear()
@@ -229,18 +250,31 @@ class DeviceGateway:
                 return turn_task
             audio = bytes(conn.audio_buf)
             conn.audio_buf.clear()
-            try:
-                text = await self.stt.transcribe(audio)
-            except Exception as exc:
-                logger.exception("STT failed")
-                await conn.send(encode_message(error_msg(f"STT failed: {exc}", sid)))
-                return turn_task
-            if not text.strip():
-                await conn.send(encode_message(error_msg("STT produced empty text", sid)))
-                return turn_task
-            await conn.send(encode_message(stt_final(sid, text)))
-            bus = EventBus(conn.send)
-            task = asyncio.create_task(self.pipeline.run_turn(session, text, bus))
-            return task
+            await self._replace_turn(session, turn_task)
+            return asyncio.create_task(self._audio_turn(conn, session, sid, audio))
 
         return turn_task
+
+    async def _audio_turn(
+        self,
+        conn: DeviceConnection,
+        session: Session,
+        sid: str,
+        audio: bytes,
+    ) -> None:
+        """STT + pipeline off the WS read loop so cancel/ping stay responsive."""
+        assert self.stt is not None
+        try:
+            text = await self.stt.transcribe(audio)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception("STT failed")
+            await conn.send(encode_message(error_msg(f"STT failed: {exc}", sid)))
+            return
+        if not text.strip():
+            await conn.send(encode_message(error_msg("STT produced empty text", sid)))
+            return
+        await conn.send(encode_message(stt_final(sid, text)))
+        bus = EventBus(conn.send)
+        await self.pipeline.run_turn(session, text, bus)

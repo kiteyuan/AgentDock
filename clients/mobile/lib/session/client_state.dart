@@ -14,7 +14,7 @@ extension ClientStateLabel on ClientState {
         ClientState.connecting => '连接中',
         ClientState.idle => '在线',
         ClientState.listening => '听着',
-        ClientState.busy => '处理中',
+        ClientState.busy => '…',
         ClientState.speaking => '播放中',
         ClientState.error => '错误',
       };

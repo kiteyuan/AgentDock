@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import inspect
+import io
 import os
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -56,7 +56,7 @@ class WhisperSTT(STTProvider):
         self.model_name = model
         self.device = device
         self.language = language or "auto"
-        self.beam_size = beam_size
+        self.beam_size = max(1, int(beam_size))
         self.vad_filter = vad_filter
         self.code_switch = self.language in (None, "auto", "") if code_switch is None else code_switch
         if initial_prompt is not None:
@@ -79,8 +79,8 @@ class WhisperSTT(STTProvider):
             from faster_whisper import WhisperModel
         except ImportError as exc:
             raise ImportError(
-                "STT is enabled by default but faster-whisper is not installed. "
-                "Run: pip install -e .   (or pip install faster-whisper)"
+                "STT requires faster-whisper. "
+                "Run: pip install -e '.[stt]'   (or pip install faster-whisper)"
             ) from exc
 
         if self.device != "cpu":
@@ -120,10 +120,9 @@ class WhisperSTT(STTProvider):
         return self.language
 
     def _transcribe_input(self, source) -> tuple[str, object]:
-        kwargs = {
+        kwargs: dict = {
             "language": self._lang(),
             "beam_size": self.beam_size,
-            "best_of": self.beam_size,
             "temperature": 0.0,
             "vad_filter": self.vad_filter and not self.code_switch,
             "condition_on_previous_text": False,
@@ -133,6 +132,9 @@ class WhisperSTT(STTProvider):
             "initial_prompt": self.initial_prompt,
             "word_timestamps": False,
         }
+        # best_of > 1 only helps with beam search; avoid duplicating work when beam_size==1
+        if self.beam_size > 1:
+            kwargs["best_of"] = self.beam_size
         if self._lang() is None and self._supports_multilingual:
             kwargs["multilingual"] = True
         segments, info = self._model.transcribe(source, **kwargs)
@@ -148,17 +150,17 @@ class WhisperSTT(STTProvider):
             parts.append(piece)
         return _join_bilingual(parts), info
 
-    def _transcribe_code_switch(self, path: str) -> str:
+    def _transcribe_code_switch(self, source) -> str:
         """Split on VAD, recognize each utterance (zh or en) then stitch."""
         try:
             from faster_whisper.audio import decode_audio
             from faster_whisper.vad import VadOptions, get_speech_timestamps
         except ImportError:
-            text, info = self._transcribe_input(path)
+            text, info = self._transcribe_input(source)
             logger.info("STT (no vad split) lang={} text={!r}", getattr(info, "language", "?"), text)
             return text
 
-        pcm = decode_audio(path, sampling_rate=16000)
+        pcm = decode_audio(source, sampling_rate=16000)
         stamps = get_speech_timestamps(
             pcm,
             VadOptions(min_silence_duration_ms=350, speech_pad_ms=240),
@@ -187,10 +189,10 @@ class WhisperSTT(STTProvider):
                 )
         return _join_bilingual(chunks)
 
-    def _transcribe_file(self, tmp: str) -> str:
+    def _transcribe_source(self, source) -> str:
         if self.code_switch and self._lang() is None:
-            return self._transcribe_code_switch(tmp)
-        text, info = self._transcribe_input(tmp)
+            return self._transcribe_code_switch(source)
+        text, info = self._transcribe_input(source)
         logger.info(
             "STT lang={} prob={:.2f} text={!r}",
             getattr(info, "language", "?"),
@@ -204,22 +206,22 @@ class WhisperSTT(STTProvider):
 
         def _run() -> str:
             t0 = time.perf_counter()
-            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-                f.write(audio)
-                tmp = f.name
+            # Prefer in-memory buffer — avoid tempfile round-trip on every utterance
+            source = io.BytesIO(audio)
             try:
                 try:
-                    text = self._transcribe_file(tmp)
+                    text = self._transcribe_source(source)
                 except RuntimeError as exc:
                     # Common on Windows: model loads on CUDA but encode needs cublas DLL
                     if self.device == "cpu" or "cublas" not in str(exc).lower():
                         raise
                     self._fallback_cpu(exc)
-                    text = self._transcribe_file(tmp)
+                    source.seek(0)
+                    text = self._transcribe_source(source)
                 logger.info("STT took {:.2f}s ({} bytes audio)", time.perf_counter() - t0, len(audio))
                 return text
             finally:
-                Path(tmp).unlink(missing_ok=True)
+                source.close()
 
         return await asyncio.to_thread(_run)
 

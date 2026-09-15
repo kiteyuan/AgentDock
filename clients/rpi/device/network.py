@@ -1,4 +1,4 @@
-﻿"""WebSocket runtime connection with reconnect + heartbeat."""
+"""WebSocket runtime connection with reconnect + heartbeat."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import websockets
 from loguru import logger
 from websockets.exceptions import ConnectionClosed
 
-from device.audio import play_file, record_until_stop, sniff_ext
+from device.audio import play_bytes, record_until_stop, sniff_ext
 from device.display import Display
 from device.protocol import audio_end, audio_start, device_hello, ping, session_cancel
 from device.state import DeviceState
@@ -37,9 +37,10 @@ class RuntimeConnection:
         display: Display,
         sample_rate: int = 16000,
         record_seconds: float = 5,
-        heartbeat_seconds: float = 15,
+        heartbeat_seconds: float = 0,
         reconnect_retries: int = 20,
         reconnect_delay: float = 1.0,
+        ws_ping_interval: float | None = 30.0,
     ) -> None:
         self.url = url
         self.device_id = device_id
@@ -51,9 +52,11 @@ class RuntimeConnection:
         self.display = display
         self.sample_rate = sample_rate
         self.record_seconds = record_seconds
+        # 0 = rely on websockets protocol ping only (preferred on Zero 2 W)
         self.heartbeat_seconds = heartbeat_seconds
         self.reconnect_retries = reconnect_retries
         self.reconnect_delay = reconnect_delay
+        self.ws_ping_interval = ws_ping_interval
         self._ws: Any = None
         self.session_id: str | None = None
         self._hb: asyncio.Task | None = None
@@ -63,14 +66,18 @@ class RuntimeConnection:
         self.display.show(state, line)
 
     async def connect(self) -> None:
+        if self._hb:
+            self._hb.cancel()
+            self._hb = None
         self._set(DeviceState.CONNECTING, self.url)
         last: Exception | None = None
         for i in range(self.reconnect_retries):
             try:
+                ping_interval = self.ws_ping_interval
                 self._ws = await websockets.connect(
                     self.url,
-                    ping_interval=20,
-                    ping_timeout=20,
+                    ping_interval=ping_interval,
+                    ping_timeout=20 if ping_interval else None,
                     max_size=16 * 1024 * 1024,
                 )
                 await self._ws.send(
@@ -89,7 +96,8 @@ class RuntimeConnection:
                 self.session_id = resp["payload"]["session_id"]
                 self._set(DeviceState.ONLINE, self.session_id or "")
                 logger.info("Connected session={}", self.session_id)
-                self._hb = asyncio.create_task(self._heartbeat())
+                if self.heartbeat_seconds and self.heartbeat_seconds > 0:
+                    self._hb = asyncio.create_task(self._heartbeat())
                 return
             except Exception as exc:  # noqa: BLE001
                 last = exc
@@ -103,8 +111,10 @@ class RuntimeConnection:
     async def close(self) -> None:
         if self._hb:
             self._hb.cancel()
+            self._hb = None
         if self._ws:
             await self._ws.close()
+            self._ws = None
 
     async def _heartbeat(self) -> None:
         try:
@@ -115,23 +125,37 @@ class RuntimeConnection:
         except (asyncio.CancelledError, ConnectionClosed):
             return
 
+    async def ensure_connected(self) -> None:
+        if self._ws is not None and self.session_id:
+            return
+        await self.connect()
+
     async def talk_once(self, stop_event) -> None:
         """Record until stop_event (second click / Enter), then send + recv."""
-        assert self._ws and self.session_id
-        self._set(DeviceState.LISTENING, "再点结束")
-        audio = await asyncio.to_thread(
-            record_until_stop,
-            stop_event,
-            self.sample_rate,
-            max_seconds=max(self.record_seconds, 60.0),
-        )
-        await self._ws.send(audio_start(self.session_id))
-        chunk = 4096
-        for i in range(0, len(audio), chunk):
-            await self._ws.send(audio[i : i + chunk])
-        await self._ws.send(audio_end(self.session_id))
-        self._set(DeviceState.PROCESSING)
-        await self._recv_turn()
+        try:
+            await self.ensure_connected()
+            assert self._ws and self.session_id
+            self._set(DeviceState.LISTENING, "再点结束")
+            audio = await asyncio.to_thread(
+                record_until_stop,
+                stop_event,
+                self.sample_rate,
+                max_seconds=max(self.record_seconds, 60.0),
+            )
+            await self._ws.send(audio_start(self.session_id))
+            mv = memoryview(audio)
+            chunk = 4096
+            for i in range(0, len(mv), chunk):
+                await self._ws.send(mv[i : i + chunk])
+            await self._ws.send(audio_end(self.session_id))
+            self._set(DeviceState.PROCESSING)
+            await self._recv_turn()
+        except ConnectionClosed:
+            logger.warning("connection lost during talk — reconnecting")
+            self._ws = None
+            self.session_id = None
+            await self.connect()
+            raise RuntimeError("connection lost; press again") from None
 
     async def cancel(self) -> None:
         if self._ws and self.session_id:
@@ -141,7 +165,6 @@ class RuntimeConnection:
         assert self._ws
         tts_buf = bytearray()
         fmt = "wav"
-        seg_n = 0
         end = {"agent.done", "agent.cancel", "agent.error", "error"}
         self._view.reset_turn()
 
@@ -160,9 +183,11 @@ class RuntimeConnection:
             if mtype == "stt.final":
                 self._set(DeviceState.PROCESSING, oled or self._view.last_oled_line)
             elif mtype == "agent.thinking":
-                self._set(DeviceState.PROCESSING, "思考中")
+                self._set(DeviceState.PROCESSING, oled or self._view.last_oled_line)
             elif mtype == "agent.tool_call":
-                self._set(DeviceState.PROCESSING, oled or "工具")
+                self._set(DeviceState.PROCESSING, oled or self._view.last_oled_line)
+            elif mtype == "agent.tool_result":
+                self._set(DeviceState.PROCESSING, oled or self._view.last_oled_line)
             elif mtype == "agent.message":
                 self._set(DeviceState.PROCESSING, oled or self._view.last_oled_line)
             elif mtype == "tts.start":
@@ -171,12 +196,9 @@ class RuntimeConnection:
                 self._set(DeviceState.SPEAKING, "播放中")
             elif mtype == "tts.end":
                 if tts_buf:
-                    seg_n += 1
-                    ext = sniff_ext(bytes(tts_buf), fmt)
-                    name = "response." + ext if seg_n == 1 else f"response-{seg_n}.{ext}"
-                    out = Path(name)
-                    out.write_bytes(tts_buf)
-                    await asyncio.to_thread(play_file, out)
+                    # Keep declared format for sniff fallback (e.g. edge mp3)
+                    _ = sniff_ext(bytes(tts_buf), fmt)
+                    await asyncio.to_thread(play_bytes, bytes(tts_buf))
                     tts_buf.clear()
             elif mtype in end:
                 break

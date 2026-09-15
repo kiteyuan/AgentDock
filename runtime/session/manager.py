@@ -10,13 +10,19 @@ from runtime.session.models import Session
 
 
 class SessionManager:
-    def __init__(self) -> None:
+    def __init__(self, *, max_context: int = 40) -> None:
         self._sessions: dict[str, Session] = {}
         self._by_device: dict[str, str] = {}
+        self.max_context = max_context
 
     def create(self, device_id: str, device_type: str = "unknown") -> Session:
         sid = uuid.uuid4().hex[:12]
-        session = Session(session_id=sid, device_id=device_id, device_type=device_type)
+        session = Session(
+            session_id=sid,
+            device_id=device_id,
+            device_type=device_type,
+            max_context=self.max_context,
+        )
         self._sessions[sid] = session
         self._by_device[device_id] = sid
         logger.info("Session created: {} for device {}", sid, device_id)

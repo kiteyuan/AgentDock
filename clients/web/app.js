@@ -31,6 +31,11 @@ let turnTtsSegments = [];
 let audioEl = null;
 let streamTimer = null;
 let streamToken = 0;
+/** One-line process trail (thinking / tools) — replaces reply until TTS caption */
+let thinkingBuf = "";
+let lastThinkingFlush = 0;
+const THINKING_MIN_MS = 400;
+const PROCESS_MAX_LEN = 72;
 
 const PREFS = { url: "ad_url", token: "ad_token", tts: "ad_tts", pet: "ad_pet", reply: "ad_last_reply", device: "ad_device_id" };
 
@@ -100,7 +105,7 @@ function restoreLastReply() {
   }
 }
 
-/** Show text immediately (e.g. STT) without wiping persisted agent reply. */
+/** Show text immediately (e.g. STT / process) without wiping persisted agent reply. */
 function showLiveReply(text) {
   const full = plainText(text);
   streamToken += 1;
@@ -114,6 +119,60 @@ function showLiveReply(text) {
   requestAnimationFrame(() => {
     $("replyBox").scrollTop = $("replyBox").scrollHeight;
   });
+}
+
+function clipProcess(s, max = PROCESS_MAX_LEN) {
+  const t = String(s || "").replace(/\s+/g, " ").trim();
+  if (t.length <= max) return t;
+  return "…" + t.slice(-(max - 1));
+}
+
+/** Native payload text only — no invented labels. */
+function nativeProcessText(type, payload = {}) {
+  const content = String(payload.content || payload.text || "").trim();
+  if (content) return content;
+  if (type === "agent.tool_call") {
+    const tool = String(payload.tool || "").trim();
+    const args = payload.args;
+    if (args && typeof args === "object" && Object.keys(args).length) {
+      try {
+        const dumped = JSON.stringify(args);
+        return tool ? `${tool} ${dumped}` : dumped;
+      } catch (_) {
+        return tool;
+      }
+    }
+    return tool;
+  }
+  return "";
+}
+
+/** One-line Runtime process update (thinking / tool / message). */
+function showProcessLine(line) {
+  if (captionStarted) return;
+  const s = clipProcess(line);
+  if (!s) return;
+  showLiveReply(s);
+}
+
+function resetThinkingBuf() {
+  thinkingBuf = "";
+  lastThinkingFlush = 0;
+}
+
+function flushThinking(final = false) {
+  const shown = thinkingBuf.trim();
+  if (!shown) {
+    if (final) resetThinkingBuf();
+    return;
+  }
+  const now = performance.now();
+  if (!final && lastThinkingFlush > 0 && now - lastThinkingFlush < THINKING_MIN_MS) {
+    return;
+  }
+  showProcessLine(shown);
+  lastThinkingFlush = now;
+  if (final) resetThinkingBuf();
 }
 
 /** Strip markdown / noise so UI shows plain readable text. */
@@ -330,22 +389,31 @@ function savePrefs() {
 
 function onEvent(type, payload = {}) {
   if (type === "stt.final") {
-    const t = (payload.text || "").trim();
-    if (t) showLiveReply(t);
+    resetThinkingBuf();
+    enterBusy();
+  } else if (type === "agent.start") {
+    flushThinking(true);
     enterBusy();
   } else if (type === "agent.thinking") {
+    const chunk = payload.content || payload.text || "";
+    if (chunk) {
+      thinkingBuf += String(chunk);
+      flushThinking(false);
+    }
     enterBusy();
   } else if (type === "agent.tool_call" || type === "agent.tool_result") {
+    flushThinking(true);
+    const line = nativeProcessText(type, payload);
+    if (line) showProcessLine(line);
     enterBusy();
   } else if (type === "agent.message") {
+    flushThinking(true);
     const t = (payload.content || payload.text || "").trim();
     const speak = payload.speak !== false;
+    if (t) showProcessLine(t);
     if (speak) {
-      // Defer UI text until each TTS sentence starts playing
       captionMode = true;
       if (t) pendingSpeakText.push(plainText(t));
-    } else if (t) {
-      streamReply(t);
     }
     enterBusy();
   } else if (type === "tts.start") {
@@ -367,9 +435,12 @@ function onEvent(type, payload = {}) {
     }
     pumpTts();
   } else if (type === "agent.error" || type === "error") {
+    resetThinkingBuf();
     enterErr();
   } else if (type === "agent.done" || type === "agent.cancel") {
+    flushThinking(true);
     if (type === "agent.cancel") {
+      resetThinkingBuf();
       ttsPlayQueue = [];
       ttsChunks = [];
       turnTtsSegments = [];

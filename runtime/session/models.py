@@ -26,9 +26,13 @@ class Session:
     created_at: float = field(default_factory=time.time)
     context: list[dict[str, Any]] = field(default_factory=list)
     cancel_event: asyncio.Event = field(default_factory=asyncio.Event)
+    # Keep last N turns (user+assistant pairs roughly); 0 = unlimited
+    max_context: int = 40
 
     def add_turn(self, role: str, text: str) -> None:
         self.context.append({"role": role, "text": text, "ts": time.time()})
+        if self.max_context > 0 and len(self.context) > self.max_context:
+            self.context = self.context[-self.max_context :]
 
     def request_cancel(self) -> None:
         self.cancel_event.set()

@@ -46,6 +46,11 @@ class DeviceSession {
   final List<int> _ttsBuf = [];
   String _ttsPendingText = '';
   bool _awaitingIdle = false;
+  String _thinkingBuf = '';
+  DateTime? _lastThinkingFlush;
+  bool _captionLive = false;
+  static const _thinkingMin = Duration(milliseconds: 400);
+  static const _processMaxLen = 72;
 
   final _changes = StreamController<void>.broadcast();
   Stream<void> get changes => _changes.stream;
@@ -63,6 +68,58 @@ class DeviceSession {
 
   void _notify() {
     if (!_changes.isClosed) _changes.add(null);
+  }
+
+  String _clipProcess(String s) {
+    final t = s.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (t.length <= _processMaxLen) return t;
+    return '…${t.substring(t.length - (_processMaxLen - 1))}';
+  }
+
+  String _nativeProcessText(String type, Map<String, dynamic> payload) {
+    final content = '${payload['content'] ?? payload['text'] ?? ''}'.trim();
+    if (content.isNotEmpty) return content;
+    if (type == 'agent.tool_call') {
+      final tool = '${payload['tool'] ?? ''}'.trim();
+      final args = payload['args'];
+      if (args is Map && args.isNotEmpty) {
+        return tool.isEmpty ? '$args' : '$tool $args';
+      }
+      return tool;
+    }
+    return '';
+  }
+
+  /// One-line native process text from the agent event. No invented labels.
+  void _showProcessLine(String line) {
+    final s = _clipProcess(line);
+    if (s.isEmpty) return;
+    if (!_captionLive) {
+      replyText = s;
+    }
+    _setState(ClientState.busy, status: s);
+  }
+
+  void _resetThinking() {
+    _thinkingBuf = '';
+    _lastThinkingFlush = null;
+  }
+
+  void _flushThinking({required bool finalFlush}) {
+    final shown = _thinkingBuf.trim();
+    if (shown.isEmpty) {
+      if (finalFlush) _resetThinking();
+      return;
+    }
+    final now = DateTime.now();
+    if (!finalFlush &&
+        _lastThinkingFlush != null &&
+        now.difference(_lastThinkingFlush!) < _thinkingMin) {
+      return;
+    }
+    _showProcessLine(shown);
+    _lastThinkingFlush = now;
+    if (finalFlush) _resetThinking();
   }
 
   void _setState(ClientState s, {String? status}) {
@@ -105,7 +162,12 @@ class DeviceSession {
         final line = t.trim();
         if (line.isEmpty) return;
         if (captionMode) {
-          replyText = replyText.isEmpty ? line : '$replyText\n$line';
+          if (!_captionLive) {
+            _captionLive = true;
+            replyText = line;
+          } else {
+            replyText = '$replyText\n$line';
+          }
         }
         _notify();
       };
@@ -236,35 +298,51 @@ class DeviceSession {
         _setState(ClientState.error, status: lastError);
         break;
       case 'stt.final':
-        final t = (payload['text'] as String? ?? '').trim();
-        if (t.isNotEmpty && !captionMode) {
-          replyText = t;
-        }
-        _setState(ClientState.busy, status: t.isEmpty ? '识别中' : '你：$t');
+        _resetThinking();
+        _captionLive = false;
+        _setState(ClientState.busy);
+        break;
+      case 'agent.start':
+        _flushThinking(finalFlush: true);
+        _setState(ClientState.busy);
         break;
       case 'agent.thinking':
+        final chunk = '${payload['content'] ?? payload['text'] ?? ''}';
+        if (chunk.isNotEmpty) {
+          _thinkingBuf += chunk;
+          _flushThinking(finalFlush: false);
+        } else {
+          _setState(ClientState.busy);
+        }
+        break;
       case 'agent.tool_call':
       case 'agent.tool_result':
-        _setState(ClientState.busy, status: '处理中');
+        _flushThinking(finalFlush: true);
+        final line = _nativeProcessText(type, payload);
+        if (line.isNotEmpty) {
+          _showProcessLine(line);
+        } else {
+          _setState(ClientState.busy);
+        }
         break;
       case 'agent.message':
+        _flushThinking(finalFlush: true);
         final speak = payload['speak'] != false;
         final t = (payload['content'] ?? payload['text'] ?? '').toString().trim();
+        if (t.isNotEmpty) {
+          _showProcessLine(t);
+        }
         if (speak) {
           captionMode = true;
-          // Defer spoken text until tts.start captions (web behavior).
-        } else if (t.isNotEmpty) {
-          replyText = t;
         }
-        _setState(ClientState.busy, status: '处理中');
         break;
       case 'tts.start':
         _ttsBuf.clear();
         _ttsPendingText = (payload['text'] as String? ?? '').trim();
-        if (captionMode && replyText.isEmpty) {
-          // first sentence will arrive via onCaption when audio plays
-        }
-        _setState(ClientState.speaking, status: '播放中');
+        _setState(
+          ClientState.speaking,
+          status: _ttsPendingText.isEmpty ? null : _clipProcess(_ttsPendingText),
+        );
         break;
       case 'tts.end':
         if (_ttsBuf.isNotEmpty) {
@@ -277,6 +355,7 @@ class DeviceSession {
         }
         break;
       case 'agent.done':
+        _flushThinking(finalFlush: true);
         _awaitingIdle = true;
         _maybeIdle();
         break;
@@ -285,6 +364,8 @@ class DeviceSession {
         _ttsBuf.clear();
         _awaitingIdle = false;
         captionMode = false;
+        _captionLive = false;
+        _resetThinking();
         _setState(ClientState.idle, status: '已取消');
         break;
       case 'device.pong':
@@ -299,6 +380,7 @@ class DeviceSession {
       _awaitingIdle = false;
       player.commitTurn();
       captionMode = false;
+      _captionLive = false;
       if (state == ClientState.busy || state == ClientState.speaking) {
         _setState(ClientState.idle, status: '点按角色通话');
       }

@@ -83,6 +83,13 @@ class GPTSoVITSTTS(TTSProvider):
             models=[self._name],
         )
 
+    async def warm(self) -> None:
+        """Pre-switch GPT/SoVITS weights so the first utterance is not cold."""
+        if not self.load_weights or self._weights_loaded:
+            return
+        await asyncio.to_thread(self._ensure_weights)
+        self._weights_loaded = True
+
     async def synthesize(self, text: str, *, model: str | None = None) -> bytes:
         if not text.strip():
             return b""

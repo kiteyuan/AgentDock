@@ -63,12 +63,15 @@ tts:
     haibara:
       type: "gpt-sovits"
       voice_dir: "voices/Haibara"
-      # ...
+      url: "http://127.0.0.1:9880"
     myvoice:
       type: "gpt-sovits"
       name: "My Voice"
       voice_dir: "voices/MyVoice"
+      url: "http://127.0.0.1:9880"
 ```
+
+GPT-SoVITS 音色需先起 `api_v2.py`（`.\scripts\start.ps1` 默认会起 `:9880`）。
 
 3. 重启 Runtime。Web / Mobile 连接后会发 `tts.list`，设置里下拉自动出现新音色。
 

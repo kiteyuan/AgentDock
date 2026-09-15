@@ -11,9 +11,26 @@ abstract final class WebUiTheme {
 
   static const replySize = 24.0;
   static const replyLh = 1.25;
-  static const replyLines = 3;
+  /// Preferred visible lines on a normal phone; shrinks on short screens.
+  static const replyLines = 6;
+  static const replyLinesMin = 3;
+  /// Reply box never takes more than this fraction of screen height.
+  static const replyMaxScreenFraction = 0.22;
 
-  static double get replyBoxHeight => replySize * replyLh * replyLines;
+  static double get lineHeightPx => replySize * replyLh;
+
+  static double get replyBoxHeight => lineHeightPx * replyLines;
+
+  /// Screen-aware height: prefer [replyLines], never below [replyLinesMin],
+  /// and never above [replyMaxScreenFraction] of the viewport.
+  static double replyBoxHeightFor(double screenHeight) {
+    final ideal = lineHeightPx * replyLines;
+    final minH = lineHeightPx * replyLinesMin;
+    final maxH = screenHeight * replyMaxScreenFraction;
+    if (maxH <= minH) return minH;
+    if (ideal <= maxH) return ideal;
+    return maxH;
+  }
 
   static const uiText = TextStyle(
     color: text,

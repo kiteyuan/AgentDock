@@ -45,13 +45,25 @@ clients/*  ◄──事件 + 语音────┘
 
 ## 快速开始
 
+Windows 一键起主机（默认 **不开 Web**；手机连 `ws://电脑IP:8765`）：
+
+```powershell
+.\scripts\start.ps1          # Runtime + Pi + Haibara TTS
+.\scripts\start.ps1 -Web     # 额外开桌面预览 http://127.0.0.1:8090/
+.\scripts\stop.ps1
+```
+
+手动分步：
+
 ```bash
-# Runtime（后端）
+# Runtime（后端，含 pets :8766）
 pip install -e .
 python -m runtime
-# 或：runtime
 
-# 统一 Web UI（另一终端）
+# Pi 网关（另一终端）
+$env:PI_GATEWAY_PORT=9001; python agents/pi-coding/gateway.py
+
+# 可选：桌面 Web 预览
 python clients/cli/main.py --ui
 
 # CLI 调试

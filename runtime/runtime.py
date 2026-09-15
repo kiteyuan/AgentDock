@@ -26,7 +26,8 @@ from runtime.workspace import resolve_workspace
 class Runtime:
     def __init__(self, cfg: dict[str, Any]) -> None:
         self.cfg = cfg
-        self.sessions = SessionManager()
+        session_cfg = cfg.get("session") or {}
+        self.sessions = SessionManager(max_context=int(session_cfg.get("max_context", 40)))
         self.registry = AgentRegistry()
         self.tts_registry = TTSRegistry()
         self.permissions = PermissionGuard()
@@ -55,6 +56,7 @@ class Runtime:
             assets_url=network.get("assets_url"),
         )
         self._pets_httpd = None
+        self._warm_tasks: list[asyncio.Task] = []
         self.gateway = DeviceGateway(
             host=server.get("host", "0.0.0.0"),
             port=server.get("port", 8765),
@@ -71,11 +73,12 @@ class Runtime:
         )
 
     async def start(self) -> None:
-        if self.stt is not None and hasattr(self.stt, "warm"):
-            try:
-                await asyncio.to_thread(self.stt.warm)
-            except Exception:
-                logger.exception("STT warm-up failed; will load on first audio")
+        stt_cfg = self.cfg.get("stt") or {}
+        tts_cfg = self.cfg.get("tts") or {}
+        warm_stt = bool(stt_cfg.get("warm", True))
+        defer_warm = bool(stt_cfg.get("defer_warm", True))
+        warm_tts = bool(tts_cfg.get("warm", True))
+
         try:
             self._pets_httpd = start_pets_http_server(
                 host=self.cfg.get("server", {}).get("host", "0.0.0.0"),
@@ -87,6 +90,20 @@ class Runtime:
                 "Pet assets HTTP failed to bind :{} — clients will not download pets",
                 self.assets_port,
             )
+
+        if self.stt is not None and warm_stt and hasattr(self.stt, "warm"):
+            if defer_warm:
+                logger.info("STT warm deferred — gateway opens while model loads")
+                self._warm_tasks.append(asyncio.create_task(self._warm_stt()))
+            else:
+                try:
+                    await asyncio.to_thread(self.stt.warm)
+                except Exception:
+                    logger.exception("STT warm-up failed; will load on first audio")
+
+        if warm_tts:
+            self._warm_tasks.append(asyncio.create_task(self._warm_default_tts()))
+
         logger.info(
             "AgentDock Runtime ready | agents={} | tts={} | default_agent={} | default_tts={} | workspace={} | pets={}",
             self.registry.ids(),
@@ -97,6 +114,22 @@ class Runtime:
             self.pets_root,
         )
         await self.gateway.start()
+
+    async def _warm_stt(self) -> None:
+        try:
+            await asyncio.to_thread(self.stt.warm)  # type: ignore[union-attr]
+        except Exception:
+            logger.exception("STT warm-up failed; will load on first audio")
+
+    async def _warm_default_tts(self) -> None:
+        tts = self.tts_registry.get(self.tts_registry.default_id)
+        if tts is None or not hasattr(tts, "warm"):
+            return
+        try:
+            await tts.warm()  # type: ignore[attr-defined]
+            logger.info("TTS warm done: {}", tts.info.id)
+        except Exception:
+            logger.warning("TTS warm skipped/failed for {} — first utterance may be cold", tts.info.id)
 
     def _build_auth(self, sec: dict[str, Any]) -> DeviceAuth:
         return DeviceAuth(

@@ -47,10 +47,7 @@ class TurnView:
             self._emit_thinking(final=True)
             text = (payload.get("text") or "").strip()
             self.last_user_text = text
-            line = f"你：{text}" if text else "你：（空）"
-            self.print(line)
-            self.last_oled_line = self._oled(text or "…")
-            return self.last_oled_line
+            return None
 
         if mtype == "agent.thinking":
             chunk = payload.get("content") or payload.get("text") or ""
@@ -62,37 +59,34 @@ class TurnView:
                 self._last_thinking_flush = now
             elif (now - self._last_thinking_flush) >= self.thinking_min_interval:
                 self._emit_thinking(final=False)
-            self.last_oled_line = "思考中"
+            shown = self._thinking_buf.strip()
+            if len(shown) > self.thinking_max_len:
+                shown = "…" + shown[-(self.thinking_max_len - 1) :]
+            self.last_oled_line = self._oled(shown)
             return self.last_oled_line
 
-        if mtype == "agent.tool_call":
+        if mtype in ("agent.tool_call", "agent.tool_result"):
             self._emit_thinking(final=True)
-            tool = payload.get("tool") or "tool"
-            self.print(f"工具：{tool}")
-            self.last_oled_line = self._oled(f"工具:{tool}")
-            return self.last_oled_line
-
-        if mtype == "agent.tool_result":
-            self._emit_thinking(final=True)
-            tool = payload.get("tool") or "tool"
-            status = payload.get("status") or "ok"
-            self.print(f"结果：{tool} · {status}")
-            self.last_oled_line = self._oled(f"结果:{status}")
+            line = _native_line(mtype, payload)
+            if not line:
+                return None
+            self.print(line)
+            self.last_oled_line = self._oled(line)
             return self.last_oled_line
 
         if mtype == "agent.message":
             self._emit_thinking(final=True)
             text = (payload.get("content") or payload.get("text") or "").strip()
             self.last_assistant_text = text
-            self.print(f"助手：{text}" if text else "助手：（空）")
-            self.last_oled_line = self._oled(text or "…")
+            if not text:
+                return None
+            self.print(text)
+            self.last_oled_line = self._oled(text)
             return self.last_oled_line
 
         if mtype == "agent.start":
             self._emit_thinking(final=True)
-            self.print("… Agent 开始")
-            self.last_oled_line = "处理中"
-            return self.last_oled_line
+            return None
 
         if mtype == "tts.start":
             self._emit_thinking(final=True)
@@ -136,11 +130,11 @@ class TurnView:
             shown = "…" + shown[-(self.thinking_max_len - 1) :]
         # Only print when we have new content; final emits once more if never printed
         if not final and shown:
-            self.print(f"思考：{shown}")
+            self.print(shown)
             self._thinking_printed = True
             self._last_thinking_flush = time.monotonic()
         elif final and shown and not self._thinking_printed:
-            self.print(f"思考：{shown}")
+            self.print(shown)
             self._thinking_printed = True
         if final:
             self._thinking_buf = ""
@@ -152,3 +146,18 @@ class TurnView:
         if len(text) <= self.oled_width:
             return text
         return text[: self.oled_width - 1] + "…"
+
+
+def _native_line(mtype: str, payload: dict[str, Any]) -> str:
+    """Agent payload as-is. No invented prefixes."""
+    content = str(payload.get("content") or payload.get("text") or "").strip()
+    if content:
+        return content
+    if mtype == "agent.tool_call":
+        tool = str(payload.get("tool") or "").strip()
+        args = payload.get("args")
+        if isinstance(args, dict) and args:
+            dumped = str(args)
+            return f"{tool} {dumped}".strip() if tool else dumped
+        return tool
+    return ""

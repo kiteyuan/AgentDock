@@ -43,6 +43,16 @@ def test_keeps_english_sentence() -> None:
     assert "**" not in out
 
 
+def test_strips_cjk_quotes() -> None:
+    out = speak_text("请把「做出来」写进文档。")
+    assert "「" not in out and "」" not in out
+    assert "做出来" in out
+    out2 = speak_text("他说『你好』和“世界”。")
+    assert "『" not in out2 and "』" not in out2
+    assert "“" not in out2 and "”" not in out2
+    assert "你好" in out2 and "世界" in out2
+
+
 def test_empty() -> None:
     assert speak_text("") == ""
     assert speak_text("   ") == ""

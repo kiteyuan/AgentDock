@@ -19,23 +19,30 @@ workspace:
 # Speech recognition — ON by default
 stt:
   provider: "whisper"
+  warm: true              # preload Whisper weights
+  defer_warm: true        # open :8765 while model loads in background
   whisper:
     model: "medium"         # medium 中文明显稳过 small；3080 仍可亚秒~2s
     device: "cuda"
     language: "zh"
-    beam_size: 5            # 提高准确率（比 1 慢一点）
+    beam_size: 5            # 提高准确率（比 1 慢一点）；1 可加快推理
     vad_filter: true
     code_switch: false
     # 领域提示：减少「技能/智能」等同音误识
     initial_prompt: "这是中文语音对话。常见词：技能、智能助手、编程、代码、Markdown、Agent、工具。"
 
-# TTS — Haibara (voices/) via GPT-SoVITS API; Edge as fallback
+# Session history sent to agents (sliding window)
+session:
+  max_context: 40
+
+# TTS — Haibara GPT-SoVITS primary; Edge fallback
 tts:
   default: "haibara"
+  warm: true                # pre-switch SoVITS weights after Runtime starts
   providers:
     haibara:
       type: "gpt-sovits"
-      name: "Haibara"
+      name: "Haibara (GPT-SoVITS)"
       voice_dir: "voices/Haibara"
       url: "http://127.0.0.1:9880"
       api: "v2"                 # v2: POST /tts ; v1: POST /
